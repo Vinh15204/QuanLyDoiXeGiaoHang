@@ -1,0 +1,36 @@
+.user-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.user-header {
+  height: 60px;
+  width: 100%;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  z-index: 100;
+}
+
+.user-content {
+  display: flex;
+  height: calc(100vh - 60px);
+}
+
+.user-info {
+  width: 33.333%;
+  background: white;
+  border-right: 1px solid #eee;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.user-map {
+  width: 66.666%;
+  position: relative;
+}
+
+.user-map .leaflet-container {
+  height: 100%;
+  width: 100%;
+}

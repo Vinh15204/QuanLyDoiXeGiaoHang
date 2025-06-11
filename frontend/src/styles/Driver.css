@@ -1,0 +1,45 @@
+.driver-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+}
+
+.driver-header {
+  flex: 0 0 60px;
+  width: 100%;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  z-index: 1000;
+}
+
+.driver-content {
+  flex: 1;
+  display: flex;
+  height: calc(100vh - 60px);
+}
+
+.driver-info {
+  flex: 0 0 33.333%;
+  height: 100%;
+  background: white;
+  border-right: 1px solid #eee;
+  padding: 20px;
+  overflow-y: auto;
+  z-index: 100;
+}
+
+.driver-map {
+  flex: 0 0 66.666%;
+  height: 100%;
+  position: relative;
+}
+
+.driver-map .leaflet-container {
+  height: 100%;
+  width: 100%;
+}
