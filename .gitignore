@@ -1,0 +1,78 @@
+# --- Node / JavaScript ---
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Logs
+logs/
+*.log
+*.log.*
+*.pid
+*.pid.lock
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Bundles / Builds
+build/
+dist/
+.cache/
+.parcel-cache/
+.next/
+out/
+frontend/build/
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# --- .NET / Visual Studio ---
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.nupkg
+*.snupkg
+*.psess
+*.vsp
+*.vspx
+*.coverage
+*.coveragexml
+TestResult*/
+_ReSharper*/
+*.DotSettings.user
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.envrc
+.mypy_cache/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Coverage / reports
+coverage/
+.nyc_output/
+lcov.info
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+*.code-workspace
+
+# Misc
+*.swp
+*.swo
