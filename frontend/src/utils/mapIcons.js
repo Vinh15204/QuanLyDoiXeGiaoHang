@@ -1,0 +1,41 @@
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import vehicleImg from '../assets/vehicle.png';
+import pickupImg from '../assets/pickup.webp';
+import deliveryImg from '../assets/delivery.webp';
+
+// Fix Leaflet's default icon path issues
+delete L.Icon.Default.prototype._getIconUrl;
+
+L.Icon.Default.mergeOptions({
+    iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png'),
+    iconUrl: require('leaflet/dist/images/marker-icon.png'),
+    shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
+});
+
+const createCustomIcon = (iconUrl, iconSize = [25, 41]) => {
+    return new L.Icon({
+        iconUrl: iconUrl,
+        iconSize: iconSize,
+        iconAnchor: [iconSize[0] / 2, iconSize[1]],
+        popupAnchor: [0, -iconSize[1]],
+        tooltipAnchor: [iconSize[0] / 2, -iconSize[1] / 2],
+        shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
+        shadowSize: [41, 41],
+        shadowAnchor: [12, 41]
+    });
+};
+
+// Custom icons with proper shadows and anchoring
+export const vehicleIcon = createCustomIcon(vehicleImg, [30, 30]);
+export const pickupIcon = createCustomIcon(pickupImg, [20, 20]);
+export const deliveryIcon = createCustomIcon(deliveryImg, [20, 20]);
+
+// Helper function to ensure icons are loaded correctly
+export const validateIcon = (icon) => {
+    if (!icon || !icon.options || !icon.options.iconUrl) {
+        console.warn('Invalid icon configuration:', icon);
+        return L.Icon.Default.prototype;
+    }
+    return icon;
+};

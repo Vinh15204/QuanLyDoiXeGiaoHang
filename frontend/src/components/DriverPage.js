@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
-import * as signalR from '@microsoft/signalr';
+import signalRService from '../services/signalRService';
+import { vehicleIcon, pickupIcon, deliveryIcon, validateIcon } from '../utils/mapIcons';
 import "leaflet/dist/leaflet.css";
 import Header from './Header';
 import '../styles/Driver.css';
@@ -9,142 +10,249 @@ import '../styles/Driver.css';
 const HANOI_CENTER = [21.0285, 105.8542];
 
 function DriverPage() {
-  const navigate = useNavigate();
-  const [routes, setRoutes] = useState([]);
-  const [currentDriver, setCurrentDriver] = useState(null);
-  const [connection, setConnection] = useState(null);
+    const navigate = useNavigate();
+    const [route, setRoute] = useState(null);
+    const [currentDriver, setCurrentDriver] = useState(null);
+    const [mapKey, setMapKey] = useState(0);
+    const [isConnected, setIsConnected] = useState(false);
 
-  useEffect(() => {
-    const userStr = localStorage.getItem('currentUser');
-    if (!userStr || JSON.parse(userStr).role !== 'driver') {
-      navigate('/login');
-      return;
-    }
+    useEffect(() => {
+        const userStr = localStorage.getItem('currentUser');
+        if (!userStr || JSON.parse(userStr).role !== 'driver') {
+            navigate('/login');
+            return;
+        }
 
-    const driver = JSON.parse(userStr);
-    setCurrentDriver(driver);
+        const driver = JSON.parse(userStr);
+        setCurrentDriver(driver);
 
-    // Create SignalR connection
-    const newConnection = new signalR.HubConnectionBuilder()
-      .withUrl('http://localhost:5000/deliveryHub', {
-        skipNegotiation: true,
-        transport: signalR.HttpTransportType.WebSockets
-      })
-      .withAutomaticReconnect()
-      .build();
+        // Lắng nghe sự kiện kết nối
+        signalRService.onConnect(() => {
+            console.log('Connected to SignalR');
+            setIsConnected(true);
+        });
 
-    // Listen for route updates
-    newConnection.on("RoutesOptimized", (updatedRoutes) => {
-      console.log("Received routes:", updatedRoutes);
-      const myRoutes = updatedRoutes.filter(r => r.vehicleId === driver.vehicleId);
-      if (myRoutes.length > 0) {
-        console.log("My routes:", myRoutes);
-        setRoutes(myRoutes);
-      }
-    });
+        // Lắng nghe sự kiện mất kết nối
+        signalRService.onDisconnect(() => {
+            console.log('Disconnected from SignalR');
+            setIsConnected(false);
+        });
 
-    // Start connection
-    async function startConnection() {
-      try {
-        await newConnection.start();
-        console.log("SignalR Connected");
-        setConnection(newConnection);
-      } catch (err) {
-        console.error("SignalR Connection Error:", err);
-        setTimeout(startConnection, 5000);
-      }
-    }
+        // Xử lý khi có route update
+        signalRService.onRouteUpdate((routeUpdate) => {
+            console.log("Received route update:", routeUpdate);
+            if (routeUpdate) {
+                const validatedRoute = validateRouteData(routeUpdate);
+                setRoute(validatedRoute);
+                setMapKey(prev => prev + 1);
+            }
+        });
 
-    startConnection();
+        // Đăng ký nhận updates
+        if (driver.vehicleId) {
+            signalRService.registerDriver(driver.vehicleId);
+        }
 
-    // Cleanup
-    return () => {
-      if (connection) {
-        connection.stop();
-      }
+        return () => {
+            if (driver.vehicleId) {
+                signalRService.unregisterDriver(driver.vehicleId);
+            }
+        };
+    }, [navigate]);
+
+    // Hàm validate dữ liệu route
+    const validateRouteData = (routeData) => {
+        if (!routeData) return null;
+
+        const validated = {
+            ...routeData,
+            currentPosition: validatePoint(routeData.currentPosition),
+            path: (routeData.path || []).map(validatePoint).filter(Boolean),
+            stops: (routeData.stops || []).map(stop => ({
+                ...stop,
+                point: validatePoint(stop.point)
+            })).filter(stop => stop.point)
+        };
+
+        console.log("Validated route data:", {
+            hasCurrentPosition: !!validated.currentPosition,
+            pathPoints: validated.path.length,
+            validStops: validated.stops.length
+        });
+
+        return validated;
     };
-  }, [navigate]);
 
-  return (
-    <div className="driver-container">
-      <div className="driver-header">
-        <Header />
-      </div>
-      <div className="driver-content">
-        <div className="driver-info">
-          <h2>Lịch trình giao hàng</h2>
-          {routes.length > 0 ? (
-            <div className="route-details">
-              {routes.map((route, index) => (
-                <div key={index} className="route-card">
-                  <div className="route-header">
-                    <h3>Thông tin lịch trình</h3>
-                    <div className="route-summary">
-                      <p><strong>Tổng quãng đường:</strong> {route.distance?.toFixed(2)} km</p>
-                      <p><strong>Thời gian dự kiến:</strong> {route.duration?.toFixed(0)} phút</p>
-                      <p><strong>Số điểm giao:</strong> {route.assignedOrders?.length || 0}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="assigned-orders">
-                    <h4>Chi tiết lộ trình</h4>
-                    <div className="route-timeline">
-                      {route.routeDetails?.map((detail, idx) => (
-                        <div key={idx} className="timeline-item">
-                          <div className="timeline-marker">{idx + 1}</div>
-                          <div className="timeline-content">
-                            <div className="step-detail">{detail}</div>
-                            <div className="step-time">
-                              {/* Thời gian ước tính cho mỗi điểm dừng */}
-                              {route.estimatedTimes?.[idx]}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="no-routes">
-              <p>Chưa có lịch trình giao hàng</p>
-              <p className="sub-text">Lịch trình sẽ được cập nhật khi có phân công từ quản lý</p>
-            </div>
-          )}
-        </div>
-        
-        <div className="driver-map">
-          <MapContainer 
-            center={HANOI_CENTER} 
-            zoom={13}
-            zoomControl={true}
-          >
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            {currentDriver && (
-              <Marker position={currentDriver.currentLocation}>
-                <Popup>Vị trí của bạn</Popup>
-              </Marker>
-            )}
-            {routes.map((route, idx) => (
-              route.route && (
-                <Polyline
-                  key={idx}
-                  positions={route.route}
-                  pathOptions={{
-                    color: 'blue',
-                    weight: 3
-                  }}
+    // Hàm validate một điểm tọa độ
+    const validatePoint = (point) => {
+        if (!point || !Array.isArray(point) || point.length !== 2) return null;
+        const [lat, lng] = point.map(Number);
+        if (isNaN(lat) || isNaN(lng)) return null;
+        return [lat, lng];
+    };
+
+    const renderMap = () => {
+        if (!route) return null;
+
+        // Log để debug
+        console.log("Current route data:", {
+            vehicleId: route.vehicleId,
+            stopsCount: route.stops?.length || 0,
+            pathPoints: route.path?.length || 0,
+            hasCurrentPosition: !!route.currentPosition,
+            firstStop: route.stops?.[0]
+        });
+
+        // Validate coordinates
+        const validPath = route.path?.filter(point => 
+            Array.isArray(point) && point.length === 2 &&
+            !isNaN(point[0]) && !isNaN(point[1])
+        ) || [];
+
+        const validStops = route.stops?.filter(stop => 
+            stop.point && Array.isArray(stop.point) && stop.point.length === 2 &&
+            !isNaN(stop.point[0]) && !isNaN(stop.point[1])
+        ) || [];
+
+        const validCurrentPosition = route.currentPosition && 
+            Array.isArray(route.currentPosition) && 
+            route.currentPosition.length === 2 && 
+            !isNaN(route.currentPosition[0]) && 
+            !isNaN(route.currentPosition[1]) ? 
+            route.currentPosition : null;
+
+        // Get center of map
+        const center = validCurrentPosition || 
+            validStops[0]?.point || 
+            validPath[0] || 
+            HANOI_CENTER;
+
+        console.log("Validated map data:", {
+            validPathPoints: validPath.length,
+            validStops: validStops.length,
+            center
+        });
+
+        return (
+            <div className="map-container">
+                <MapContainer 
+                    key={mapKey}
+                    center={center}
+                    zoom={13}
+                    style={{ height: "100%", width: "100%" }}
                 >
-                  <Popup>Lộ trình của bạn</Popup>
-                </Polyline>
-              )
-            ))}
-          </MapContainer>
+                    <TileLayer
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    />
+                    
+                    {/* Hiển thị đường đi */}
+                    {validPath.length >= 2 && (
+                        <Polyline 
+                            positions={validPath}
+                            color="#007bff"
+                            weight={4}
+                            opacity={0.8}
+                        />
+                    )}
+
+                    {/* Hiển thị vị trí xe */}
+                    {validCurrentPosition && (
+                        <Marker
+                            position={validCurrentPosition}
+                            icon={validateIcon(vehicleIcon)}
+                            zIndexOffset={1000}
+                        >
+                            <Popup>
+                                <div className="vehicle-popup">
+                                    <h4>Xe #{route.vehicleId}</h4>
+                                    <p>Vị trí hiện tại</p>
+                                    <p>Số điểm dừng: {validStops.length}</p>
+                                </div>
+                            </Popup>
+                        </Marker>
+                    )}
+
+                    {/* Hiển thị các điểm dừng */}
+                    {validStops.map((stop, index) => {
+                        return (
+                            <Marker
+                                key={index}
+                                position={stop.point}
+                                icon={validateIcon(stop.type === 'pickup' ? pickupIcon : deliveryIcon)}
+                                zIndexOffset={stop.type === 'pickup' ? 500 : 0}
+                            >
+                                <Popup>
+                                    <div className="stop-popup">
+                                        <h4>{stop.type === 'pickup' ? 'Điểm nhận' : 'Điểm giao'}</h4>
+                                        <p><strong>Đơn hàng:</strong> #{stop.orderId}</p>
+                                        {stop.type === 'pickup' && stop.weight && (
+                                            <p><strong>Trọng lượng:</strong> {stop.weight}kg</p>
+                                        )}
+                                        <p><strong>STT:</strong> {stop.index}</p>
+                                        {stop.address && (
+                                            <p><strong>Địa chỉ:</strong> {stop.address}</p>
+                                        )}
+                                    </div>
+                                </Popup>
+                            </Marker>
+                        );
+                    })}
+                </MapContainer>
+            </div>
+        );
+    };
+
+    const renderRouteDetails = () => {
+        if (!route) {
+            return (
+                <div className="sidebar">
+                    <div className="route-details">
+                        <h3>Thông tin lộ trình</h3>
+                        <div className="stats">
+                            <p>Chưa có lộ trình nào được phân công</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const validStops = route.stops?.filter(stop => 
+            stop.point && Array.isArray(stop.point) && stop.point.length === 2 &&
+            !isNaN(stop.point[0]) && !isNaN(stop.point[1])
+        ) || [];
+
+        return (
+            <div className="sidebar">
+                <div className="route-details">
+                    <h3>Chi tiết lộ trình</h3>
+                    <div className="stats">
+                        <p><strong>Tổng quãng đường:</strong> {route.distance?.toFixed(2)} km</p>
+                        <p><strong>Thời gian ước tính:</strong> {route.duration?.toFixed(0)} phút</p>
+                        <p><strong>Số điểm dừng:</strong> {validStops.length}</p>
+                    </div>
+                    <div className="steps">
+                        {route.routeDetails?.map((detail, index) => (
+                            <div key={index} className="step">
+                                <div className="step-number">{index + 1}</div>
+                                <div className="step-description">{detail}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="driver-page">
+            <Header />
+            <div className="content">
+                {renderMap()}
+                {renderRouteDetails()}
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 }
 
 export default DriverPage;

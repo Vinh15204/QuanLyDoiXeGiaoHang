@@ -1,28 +1,132 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Polyline } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
 import Modal from "./Modal";
 import Header from "./Header";
-import initialData from '../data/initialData.json';
-import '../styles/Admin.css'; // Updated import with capital A
+import 'leaflet/dist/leaflet.css';
+import { vehicleIcon, pickupIcon, deliveryIcon, validateIcon } from '../utils/mapIcons';
+import '../styles/Admin.css';
+import '../styles/Icons.css';
 
-const COLORS = ["blue", "red", "green", "orange", "purple"];
+const COLORS = ["#2196F3", "#F44336", "#4CAF50", "#FF9800", "#9C27B0"];
 const HANOI_CENTER = [21.0285, 105.8542];
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+
+const VehiclePopup = ({ vehicle, optimizedRoutes, onViewRoute }) => (
+  <div className="popup-content">
+    <h3>Xe #{vehicle.id}</h3>
+    <p>Tải trọng: {vehicle.maxLoad}kg</p>
+    <p>Vị trí: [{vehicle.position[0].toFixed(4)}, {vehicle.position[1].toFixed(4)}]</p>
+    {optimizedRoutes?.find(r => r.vehicleId === vehicle.id) && (
+      <>
+        <p>Số đơn hàng: {optimizedRoutes.find(r => r.vehicleId === vehicle.id).assignedOrders.length}</p>
+        <p>Quãng đường: {optimizedRoutes.find(r => r.vehicleId === vehicle.id).distance}km</p>
+        <p>Thời gian: {optimizedRoutes.find(r => r.vehicleId === vehicle.id).duration} phút</p>
+        <button className="popup-button" onClick={onViewRoute}>
+          Xem chi tiết lộ trình
+        </button>
+      </>
+    )}
+  </div>
+);
+
+const OrderPopup = ({ order, type, optimizedRoutes }) => (
+  <div className="popup-content">
+    <h3>{type === 'pickup' ? 'Điểm lấy hàng' : 'Điểm giao hàng'} #{order.id}</h3>
+    <p>Trọng lượng: {order.weight}kg</p>
+    {type === 'pickup' ? (
+      <p>Người gửi: #{order.senderId}</p>
+    ) : (
+      <p>Người nhận: #{order.receiverId}</p>
+    )}
+    <p>Trạng thái: {order.status}</p>
+    {optimizedRoutes?.some(r => r.assignedOrders.includes(order.id)) && (
+      <p>Xe được phân công: #{optimizedRoutes.find(r => r.assignedOrders.includes(order.id)).vehicleId}</p>
+    )}
+  </div>
+);
 
 function AdminDashboard() {
-  const [vehicles] = useState(initialData.vehicles);
-  const [orders] = useState(initialData.orders);
+  const [vehicles, setVehicles] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [optimizedRoutes, setOptimizedRoutes] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [optimizationStatus, setOptimizationStatus] = useState('idle'); // idle, loading, success, error
   const [isVehiclesModalOpen, setVehiclesModalOpen] = useState(false);
   const [isOrdersModalOpen, setOrdersModalOpen] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState(null);
+  const [optimizationStats, setOptimizationStats] = useState(null);
 
-  const handleOptimize = async () => {
-    setLoading(true);
-    setError(null);
+  // Fetch data on mount
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  // Fetch data function
+  const fetchData = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/optimize', {
+      setLoading(true);
+      setError(null);
+
+      const [vehiclesRes, ordersRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/vehicles`),
+        fetch(`${API_BASE_URL}/api/orders`)
+      ]);
+
+      if (!vehiclesRes.ok || !ordersRes.ok) {
+        throw new Error(
+          `Network response was not ok - Vehicles: ${vehiclesRes.status}, Orders: ${ordersRes.status}`
+        );
+      }
+
+      const vehiclesData = await vehiclesRes.json();
+      const ordersData = await ordersRes.json();
+
+      if (!Array.isArray(vehiclesData) || !Array.isArray(ordersData)) {
+        throw new Error('Invalid data format received from server');
+      }
+
+      setVehicles(vehiclesData);
+      setOrders(ordersData);
+      
+      console.log('Data loaded:', {
+        vehicles: vehiclesData.length,
+        orders: ordersData.length
+      });
+
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      setError('Lỗi khi tải dữ liệu: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Optimization function
+  const handleOptimize = async () => {
+    if (optimizationStatus === 'loading') {
+      console.log('Already optimizing, please wait...');
+      return;
+    }
+
+    try {
+      setOptimizationStatus('loading');
+      setError(null);
+      setOptimizationStats(null);
+      
+      // Validate data
+      if (!vehicles.length || !orders.length) {
+        throw new Error('No vehicles or orders available');
+      }
+
+      console.log('Starting optimization:', {
+        vehicles: vehicles.length,
+        orders: orders.length
+      });
+
+      // Call optimization API
+      const response = await fetch(`${API_BASE_URL}/api/optimize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -31,21 +135,31 @@ function AdminDashboard() {
       });
 
       if (!response.ok) {
-        throw new Error('Lỗi khi tính toán lộ trình');
+        const errorData = await response.json();
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      // Ensure the routes data is properly formatted
-      const processedRoutes = data.routes.map(route => ({
-        ...route,
-        path: Array.isArray(route.route) ? route.route : [],
-        vehicleId: route.vehicleId || 0
-      }));
-      setOptimizedRoutes(processedRoutes);
+      console.log('Optimization response:', data);
+
+      if (!data.routes || !Array.isArray(data.routes)) {
+        throw new Error('Invalid response format');
+      }
+
+      // Update state with results
+      setOptimizedRoutes(data.routes);
+      setOptimizationStats(data.stats);
+      setOptimizationStatus('success');
+      
+      console.log('Optimization completed:', {
+        routes: data.routes.length,
+        stats: data.stats
+      });
+
     } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
+      console.error('Optimization error:', err);
+      setError('Lỗi khi tối ưu: ' + err.message);
+      setOptimizationStatus('error');
     }
   };
 
@@ -57,24 +171,58 @@ function AdminDashboard() {
           
           {/* Render vehicles */}
           {vehicles.map(vehicle => (
-            <Marker key={vehicle.id} position={vehicle.position}>
-              <Popup>Xe #{vehicle.id}</Popup>
+            <Marker 
+              key={vehicle.id} 
+              position={vehicle.position}
+              icon={validateIcon(vehicleIcon)}
+              zIndexOffset={1000}
+              eventHandlers={{
+                click: () => setSelectedVehicle(vehicle)
+              }}
+            >
+              <Popup>
+                <VehiclePopup 
+                  vehicle={vehicle} 
+                  optimizedRoutes={optimizedRoutes}
+                  onViewRoute={() => setSelectedVehicle(vehicle)}
+                />
+              </Popup>
             </Marker>
           ))}
 
           {/* Render orders */}
           {orders.map(order => (
             <React.Fragment key={order.id}>
-              <CircleMarker center={order.pickup} radius={7} color="blue">
-                <Popup>Điểm lấy hàng #{order.id}</Popup>
-              </CircleMarker>
-              <CircleMarker center={order.delivery} radius={7} color="red">
-                <Popup>Điểm giao hàng #{order.id}</Popup>
-              </CircleMarker>
+              <Marker 
+                position={order.pickup} 
+                icon={validateIcon(pickupIcon)}
+                zIndexOffset={500}
+              >
+                <Popup>
+                  <OrderPopup 
+                    order={order}
+                    type="pickup"
+                    optimizedRoutes={optimizedRoutes}
+                  />
+                </Popup>
+              </Marker>
+              <Marker 
+                position={order.delivery} 
+                icon={validateIcon(deliveryIcon)}
+                zIndexOffset={0}
+              >
+                <Popup>
+                  <OrderPopup 
+                    order={order}
+                    type="delivery"
+                    optimizedRoutes={optimizedRoutes}
+                  />
+                </Popup>
+              </Marker>
             </React.Fragment>
           ))}
 
-          {/* Render optimized routes only if they exist and have valid coordinates */}
+          {/* Render optimized routes */}
           {optimizedRoutes?.map((route, idx) => (
             route.path && route.path.length >= 2 ? (
               <Polyline
@@ -82,14 +230,44 @@ function AdminDashboard() {
                 positions={route.path}
                 pathOptions={{
                   color: COLORS[idx % COLORS.length],
-                  weight: 3
+                  weight: 3,
+                  opacity: selectedVehicle ? (selectedVehicle.id === route.vehicleId ? 1 : 0.3) : 1
                 }}
               >
-                <Popup>Lộ trình xe #{route.vehicleId}</Popup>
+                <Popup>
+                  <div className="popup-content">
+                    <h3>Lộ trình xe #{route.vehicleId}</h3>
+                    <p>Quãng đường: {route.distance}km</p>
+                    <p>Thời gian: {route.duration} phút</p>
+                    <p>Đơn hàng: {route.assignedOrders.join(', ')}</p>
+                  </div>
+                </Popup>
               </Polyline>
             ) : null
           ))}
         </MapContainer>
+
+        {/* Route details panel when a vehicle is selected */}
+        {selectedVehicle && optimizedRoutes && (
+          <div className="route-details-panel">
+            <div className="panel-header">
+              <h3>Chi tiết lộ trình xe #{selectedVehicle.id}</h3>
+              <button onClick={() => setSelectedVehicle(null)}>&times;</button>
+            </div>            {(() => {
+              const vehicleRoute = optimizedRoutes.find(r => r.vehicleId === selectedVehicle.id);
+              if (vehicleRoute && Array.isArray(vehicleRoute.routeDetails)) {
+                return vehicleRoute.routeDetails.map((detail, idx) => (
+                  <div key={idx} className="route-step">
+                    <div className="step-number">{idx + 1}</div>
+                    <div className="step-description">{detail}</div>
+                  </div>
+                ));
+              } else {
+                return <div className="no-route">Không có thông tin lộ trình</div>;
+              }
+            })()}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -99,31 +277,68 @@ function AdminDashboard() {
       <div className="info-panel">
         <div className="control-section">
           <h3>Thông tin tổng quan</h3>
-          <p>Số xe: {vehicles.length}</p>
-          <p>Số đơn hàng: {orders.length}</p>
-          <button 
-            className="optimize-button"
-            onClick={handleOptimize}
-            disabled={loading}
-          >
-            {loading ? 'Đang tính toán...' : 'Tính toán lộ trình'}
-          </button>
-          {error && <p className="error-message">{error}</p>}
-        </div>
-
-        <div className="vehicles-section">
-          {/* Hiển thị danh sách xe */}
-        </div>
-
-        <div className="orders-section">
-          {/* Hiển thị danh sách đơn hàng */}
-        </div>
-
-        {optimizedRoutes && (
-          <div className="routes-section">
-            {/* Hiển thị kết quả tính toán */}
+          <div className="stats-container">
+            <div className="stats-item">
+              <label>Số xe:</label>
+              <span>{vehicles.length}</span>
+            </div>
+            <div className="stats-item">
+              <label>Số đơn hàng:</label>
+              <span>{orders.length}</span>
+            </div>
+            
+            {optimizationStats && (
+              <>
+                <div className="stats-item">
+                  <label>Xe được phân công:</label>
+                  <span>{optimizationStats.vehiclesWithRoutes} / {optimizationStats.totalVehicles}</span>
+                </div>
+                <div className="stats-item">
+                  <label>Đơn được phân công:</label>
+                  <span>{optimizationStats.assignedOrders} / {optimizationStats.totalOrders}</span>
+                </div>
+                <div className="stats-item">
+                  <label>Thời gian tối đa:</label>
+                  <span>{optimizationStats.makespan?.toFixed(1)} phút</span>
+                </div>
+              </>
+            )}
           </div>
-        )}
+
+          <div className="optimization-controls">
+            <button 
+              className={`optimize-button ${optimizationStatus}`}
+              onClick={handleOptimize}
+              disabled={optimizationStatus === 'loading' || !vehicles.length || !orders.length}
+            >
+              {optimizationStatus === 'loading' && (
+                <span className="loader"></span>
+              )}
+              {optimizationStatus === 'loading' ? 'Đang tối ưu...' : 'Tính toán lộ trình'}
+            </button>
+
+            {error && (
+              <div className="error-message">
+                {error}
+              </div>
+            )}
+
+            {optimizationStatus === 'success' && (
+              <div className="success-message">
+                Tính toán lộ trình thành công!
+              </div>
+            )}
+          </div>
+
+          <div className="buttons-container">
+            <button onClick={() => setVehiclesModalOpen(true)}>
+              Quản lý đội xe
+            </button>
+            <button onClick={() => setOrdersModalOpen(true)}>
+              Quản lý đơn hàng
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -137,40 +352,6 @@ function AdminDashboard() {
           <Route path="info" element={<InfoView />} />
           <Route path="" element={<Navigate to="map" replace />} />
         </Routes>
-
-        <Modal 
-          isOpen={isVehiclesModalOpen} 
-          onClose={() => setVehiclesModalOpen(false)}
-          title="Thông tin đội xe"
-        >
-          <div className="scrollable-container">
-            {initialData.vehicles.map(vehicle => (
-              <div key={vehicle.id} className="vehicle-item">
-                <h4>Xe #{vehicle.id}</h4>
-                <p>Tải trọng: {vehicle.maxLoad}kg</p>
-                <p>Vị trí: [{vehicle.position[0].toFixed(4)}, {vehicle.position[1].toFixed(4)}]</p>
-              </div>
-            ))}
-          </div>
-        </Modal>
-
-        <Modal 
-          isOpen={isOrdersModalOpen} 
-          onClose={() => setOrdersModalOpen(false)}
-          title="Thông tin đơn hàng"
-        >
-          <div className="scrollable-container">
-            {initialData.orders.map(order => (
-              <div key={order.id} className="order-item">
-                <h4>Đơn hàng #{order.id}</h4>
-                <p>Trọng lượng: {order.weight}kg</p>
-                <p>Trạng thái: {order.status}</p>
-                <p>Người gửi: {order.senderId}</p>
-                <p>Người nhận: {order.receiverId}</p>
-              </div>
-            ))}
-          </div>
-        </Modal>
       </div>
     </div>
   );

@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "leaflet": "^1.7.1",
+    "@microsoft/signalr": "^7.0.14",
+    "leaflet": "^1.9.4",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
-    "react-leaflet": "^3.2.0",
+    "react-leaflet": "^3.2.5",
     "react-router-dom": "^6.3.0",
     "react-scripts": "^5.0.1",
-    "@microsoft/signalr": "^7.0.12"
+    "socket.io-client": "^4.8.1"
   },
   "scripts": {
     "start": "set NODE_OPTIONS=--openssl-legacy-provider && react-scripts start",
