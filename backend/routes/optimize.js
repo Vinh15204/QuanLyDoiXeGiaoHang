@@ -46,9 +46,14 @@ router.post('/', async (req, res) => {
 
         // Start optimization
         console.log('Starting optimization...');
+<<<<<<< HEAD
         // Chỉ sử dụng OR-Tools, không fallback JS
         const optimizationResult = await optimizer.assignOrdersOrtools(vehicles, orders);
         console.log('OR-Tools optimization result:', JSON.stringify(optimizationResult, null, 2));
+=======
+        const optimizationResult = await optimizer.assignOrders(vehicles, orders);
+        
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
         if (!optimizationResult?.assignments) {
             throw new Error('Optimization failed');
         }
@@ -57,6 +62,7 @@ router.post('/', async (req, res) => {
         const routes = [];
         const errors = [];
 
+<<<<<<< HEAD
         // Build routes for each vehicle (ưu tiên dùng route từ OR-Tools nếu có)
         for (const [vehicleId, assignedOrderIds] of Object.entries(assignments)) {
             try {
@@ -209,6 +215,35 @@ router.post('/', async (req, res) => {
                     path: routePath // Đường đi thực tế từ OSRM đi qua tất cả stops
                 };
 
+=======
+        // Build routes for each vehicle
+        for (const [vehicleId, vehicleOrders] of Object.entries(assignments)) {
+            try {
+                const vehicle = vehicles.find(v => v.id === parseInt(vehicleId));
+                if (!vehicle || vehicleOrders.length === 0) continue;
+
+                // Get route path and details
+                const route = optimizer.buildRoute(vehicle, vehicleOrders, routeDetails[vehicleId]);
+                const routeInfo = optimizer.generateRouteDetails(vehicle, vehicleOrders, routeDetails[vehicleId]);
+                const osrmResult = await optimizer.getOsrmRoute(route);
+
+                // Create route data
+                const routeData = {
+                    vehicleId: parseInt(vehicleId),
+                    assignedOrders: vehicleOrders.map(o => o.id),
+                    path: osrmResult.route || route,
+                    distance: routeInfo.stats.distance || osrmResult.distance || 0,
+                    duration: routeInfo.stats.totalTime || osrmResult.duration || 0,
+                    totalWeight: stats.vehicleLoads[vehicleId] || 0,
+                    routeDetails: routeInfo.details || [],
+                    stops: routeDetails[vehicleId] || [],
+                    vehiclePosition: vehicle.position,
+                    status: 'active',
+                    timestamp: new Date()
+                };
+
+                // Save to database
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
                 await Route.findOneAndUpdate(
                     { vehicleId: parseInt(vehicleId) },
                     routeData,
@@ -216,6 +251,10 @@ router.post('/', async (req, res) => {
                 );
 
                 routes.push(routeData);
+<<<<<<< HEAD
+=======
+
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
             } catch (error) {
                 console.error(`Error processing vehicle ${vehicleId}:`, error);
                 errors.push(`Error with vehicle ${vehicleId}: ${error.message}`);
@@ -231,20 +270,31 @@ router.post('/', async (req, res) => {
         const response = {
             routes,
             stats: {
+<<<<<<< HEAD
                 makespan: stats && stats.makespan !== undefined ? stats.makespan : (routes.length > 0 ? Math.max(...routes.map(r => r.duration || 0)) : 0),
+=======
+                makespan: stats.makespan,
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
                 totalOrders: orders.length,
                 assignedOrders: routes.reduce((sum, r) => sum + r.assignedOrders.length, 0),
                 totalVehicles: vehicles.length,
                 vehiclesWithRoutes: routes.length
             },
             errors: errors.length > 0 ? errors : undefined
+<<<<<<< HEAD
         };        // Log success
+=======
+        };
+
+        // Log success
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
         console.log('Optimization completed:', {
             numRoutes: routes.length,
             numErrors: errors.length,
             stats: response.stats
         });
 
+<<<<<<< HEAD
         // Broadcast route updates to all drivers
         try {
             console.log('Broadcasting route updates to drivers...');
@@ -260,6 +310,8 @@ router.post('/', async (req, res) => {
             console.error('Error broadcasting route updates:', e);
         }
 
+=======
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
         return res.json(response);
 
     } catch (error) {
@@ -272,6 +324,7 @@ router.post('/', async (req, res) => {
     }
 });
 
+<<<<<<< HEAD
 // GET /api/optimize/route/:vehicleId - Get route for specific vehicle
 router.get('/route/:vehicleId', async (req, res) => {
     try {
@@ -300,4 +353,6 @@ router.get('/route/:vehicleId', async (req, res) => {
     }
 });
 
+=======
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
 module.exports = router;

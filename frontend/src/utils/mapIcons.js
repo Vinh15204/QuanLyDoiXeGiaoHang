@@ -21,6 +21,7 @@ const createCustomIcon = (iconUrl, iconSize = [25, 41]) => {
         popupAnchor: [0, -iconSize[1]],
         tooltipAnchor: [iconSize[0] / 2, -iconSize[1] / 2],
         shadowUrl: require('leaflet/dist/images/marker-shadow.png'),
+<<<<<<< HEAD
         shadowSize: [iconSize[0] * 1.2, iconSize[1] * 1.2], // Scale shadow with icon size
         shadowAnchor: [iconSize[0] * 0.4, iconSize[1]]
     });
@@ -30,6 +31,17 @@ const createCustomIcon = (iconUrl, iconSize = [25, 41]) => {
 export const vehicleIcon = createCustomIcon(vehicleImg, [15, 15]);
 export const pickupIcon = createCustomIcon(pickupImg, [10, 10]);
 export const deliveryIcon = createCustomIcon(deliveryImg, [10, 10]);
+=======
+        shadowSize: [41, 41],
+        shadowAnchor: [12, 41]
+    });
+};
+
+// Custom icons with proper shadows and anchoring
+export const vehicleIcon = createCustomIcon(vehicleImg, [30, 30]);
+export const pickupIcon = createCustomIcon(pickupImg, [20, 20]);
+export const deliveryIcon = createCustomIcon(deliveryImg, [20, 20]);
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
 
 // Helper function to ensure icons are loaded correctly
 export const validateIcon = (icon) => {

@@ -364,18 +364,6 @@ app.patch('/api/orders/:id', async (req, res) => {
   }
 });
 
-// Lấy đơn hàng theo id
-app.get('/api/orders/:id', async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const order = await Order.findOne({ id: parseInt(id) });
-    if (!order) return res.status(404).json({ error: 'Order not found' });
-    res.json(order);
-  } catch (err) {
-    next(err);
-  }
-});
-
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);

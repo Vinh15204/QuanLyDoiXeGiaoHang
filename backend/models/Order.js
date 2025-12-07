@@ -26,10 +26,13 @@ const OrderSchema = new mongoose.Schema({
             message: 'Pickup location must be [latitude, longitude]'
         }
     },
+<<<<<<< HEAD
     pickupAddress: {
         type: String,
         default: ''
     },
+=======
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
     delivery: { 
         type: [Number], 
         required: true,
@@ -40,10 +43,13 @@ const OrderSchema = new mongoose.Schema({
             message: 'Delivery location must be [latitude, longitude]'
         }
     },
+<<<<<<< HEAD
     deliveryAddress: {
         type: String,
         default: ''
     },
+=======
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
     weight: { 
         type: Number, 
         required: true,

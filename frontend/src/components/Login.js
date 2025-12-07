@@ -13,7 +13,10 @@ function Login() {
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
   const handleLogin = async (e) => {
+<<<<<<< HEAD
     let isMounted = true;
+=======
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
     e.preventDefault();
     try {
       setLoading(true);
@@ -49,6 +52,7 @@ function Login() {
         console.log('Login successful, redirecting to:', user.role);
         localStorage.setItem('currentUser', JSON.stringify(user));
         
+<<<<<<< HEAD
         if (isMounted) {
           switch(user.role) {
             case 'user': 
@@ -72,6 +76,29 @@ function Login() {
       if (isMounted) setError(`Lỗi đăng nhập: ${err.message}`);
     } finally {
       if (isMounted) setLoading(false);
+=======
+        switch(user.role) {
+          case 'user': 
+            navigate('/user'); 
+            break;
+          case 'driver': 
+            navigate('/driver'); 
+            break;
+          case 'admin': 
+            navigate('/admin'); 
+            break;
+          default: 
+            navigate('/login');
+        }
+      } else {
+        setError('Sai tên đăng nhập hoặc mật khẩu!');
+      }
+    } catch (err) {
+      console.error('Login error:', err);
+      setError(`Lỗi đăng nhập: ${err.message}`);
+    } finally {
+      setLoading(false);
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
     }
     return () => { isMounted = false; };
   };
@@ -101,36 +128,59 @@ function Login() {
 
   return (
     <div className="login-container">
+<<<<<<< HEAD
       <div className="login-form">
+=======
+      <div className="login-box">
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
         <h2>Đăng nhập</h2>
         {error && <div className="error-message">{error}</div>}
         <form onSubmit={handleLogin}>
           <div className="form-group">
+<<<<<<< HEAD
             <label htmlFor="username">Tên đăng nhập</label>
+=======
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
             <input
               id="username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+<<<<<<< HEAD
               placeholder="Nhập tên đăng nhập"
+=======
+              placeholder="Tên đăng nhập"
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
               disabled={loading}
               required
             />
           </div>
           <div className="form-group">
+<<<<<<< HEAD
             <label htmlFor="password">Mật khẩu</label>
+=======
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
             <input
               id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+<<<<<<< HEAD
               placeholder="Nhập mật khẩu"
+=======
+              placeholder="Mật khẩu"
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
               disabled={loading}
               required
             />
           </div>
+<<<<<<< HEAD
           <button type="submit" disabled={loading}>
             {loading && <span className="loading-spinner"></span>}
+=======
+          {error && <div className="error-message">{error}</div>}
+          <button type="submit" disabled={loading}>
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
             {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
           </button>
         </form>

@@ -1,6 +1,7 @@
 // Port từ OptimizeController.cs
 const axios = require('axios');
 const Route = require('../models/Route');
+<<<<<<< HEAD
 const { spawn } = require('child_process');
 
 // Douglas-Peucker algorithm để giảm số điểm trong polyline
@@ -70,6 +71,8 @@ function pruneOsrmCache() {
         osrmCache.delete(k);
     }
 }
+=======
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
 
 // Hàm gọi OSRM để lấy đường đi thực tế giữa các điểm
 async function getOsrmRoute(points) {
@@ -86,6 +89,7 @@ async function getOsrmRoute(points) {
             return { route: points, distance: 0, duration: 0 };
         }
 
+<<<<<<< HEAD
         // Build coordinates string for all points
         const coordinates = points.map(p => 
             Array.isArray(p) && p.length === 2 ? `${p[1]},${p[0]}` : null
@@ -172,6 +176,35 @@ async function getOsrmRoute(points) {
         // Final fallback: return straight lines
         const distance = calculateDistance(points);
         const duration = (distance / 30) * 60; // 30 km/h
+=======
+        const coordinates = points.map(p => {
+            if (!Array.isArray(p) || p.length !== 2) {
+                throw new Error(`Invalid coordinates: ${JSON.stringify(p)}`);
+            }
+            return `${p[1]},${p[0]}`;
+        }).join(';');
+
+        console.log('Calling OSRM with coordinates:', coordinates);
+        const url = `http://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`;
+        const response = await axios.get(url);
+        
+        if (response.data.code !== 'Ok') {
+            console.error('OSRM response not OK:', response.data);
+            throw new Error('OSRM request failed');
+        }
+
+        const route = response.data.routes[0];
+        return {
+            route: route.geometry.coordinates.map(coord => [coord[1], coord[0]]),
+            distance: route.distance / 1000, // Convert to km
+            duration: route.duration / 60 // Convert to minutes
+        };
+    } catch (error) {
+        console.error('Error getting OSRM route:', error);
+        // Fallback: calculate straight-line distance
+        const distance = calculateDistance(points);
+        const duration = (distance / 30) * 60; // Assume 30 km/h average speed
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
         return {
             route: points,
             distance,
@@ -671,6 +704,7 @@ function buildCompleteRoute(vehicle, vehicleOrders, routeDetails) {
         console.error('Invalid vehicle data:', vehicle);
         return [];
     }
+<<<<<<< HEAD
     if (!Array.isArray(vehicleOrders) || vehicleOrders.length === 0) {
         return [vehicle.position, vehicle.position];
     }
@@ -726,6 +760,31 @@ function buildCompleteRoute(vehicle, vehicleOrders, routeDetails) {
     }
     // Quay về depot
     route.push(vehicle.position);
+=======
+
+    let route = [];
+
+    // Nếu có route details, sử dụng nó
+    if (routeDetails && Array.isArray(routeDetails)) {
+        route = [vehicle.position, ...routeDetails.map(detail => detail.point)];
+    } else {
+        // Fallback: Xây dựng route theo thứ tự gốc
+        if (!Array.isArray(vehicleOrders)) {
+            console.error('Invalid orders array:', vehicleOrders);
+            return [vehicle.position];
+        }
+
+        route = [vehicle.position];
+        vehicleOrders.forEach(order => {
+            if (order.pickup) route.push(order.pickup);
+            if (order.delivery) route.push(order.delivery);
+        });
+    }
+
+    // Thêm điểm quay về depot vào cuối route
+    route.push(vehicle.position);
+
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
     return route;
 }
 
@@ -814,6 +873,7 @@ async function getCurrentRoute(vehicleId) {
     }
 }
 
+<<<<<<< HEAD
 // Hàm tối ưu hóa sử dụng Google OR-Tools (Python)
 async function assignOrdersOrtools(vehicles, orders) {
     return new Promise((resolve, reject) => {
@@ -853,6 +913,10 @@ async function assignOrdersOrtools(vehicles, orders) {
 module.exports = {
     assignOrders,
     assignOrdersOrtools, // <-- Thêm export hàm mới
+=======
+module.exports = {
+    assignOrders,
+>>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
     getOsrmRoute,
     buildRoute: buildCompleteRoute,
     generateRouteDetails,
