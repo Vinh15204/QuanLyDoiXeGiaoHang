@@ -1,34 +1,119 @@
-import * as signalR from '@microsoft/signalr';
+import io from 'socket.io-client';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 class SignalRService {
     constructor() {
-        this.connection = new signalR.HubConnectionBuilder()
-            .withUrl('http://localhost:5000/deliveryHub', {
-                withCredentials: true,
-                skipNegotiation: true,
-                transport: signalR.HttpTransportType.WebSockets
-            })
-            .withAutomaticReconnect()
-            .build();
+        this._connectHandlers = [];
+        this._disconnectHandlers = [];
+        this._routeUpdateHandlers = [];
 
-        this.connection.start().catch(err => console.error('SignalR Connection Error: ', err));
+        this.socket = io(API_BASE_URL, {
+            transports: ['websocket'],
+            autoConnect: true,
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            reconnectionAttempts: Infinity
+        });
+
+        this.socket.on('connect', () => {
+            console.log('Socket.IO Connected successfully');
+            this._retryCount = 0;
+            this._connectHandlers.forEach(handler => handler());
+        });
+
+        this.socket.on('connect_error', (error) => {
+            console.error('Socket.IO Connection Error:', error);
+            this._retryCount = (this._retryCount || 0) + 1;
+            console.log(`Retrying connection... Attempt ${this._retryCount}`);
+        });
+
+        this.socket.on('disconnect', (reason) => {
+            console.log('Socket.IO Disconnected:', reason);
+            this._disconnectHandlers.forEach(handler => handler());
+            if (reason === 'io server disconnect') {
+                this.socket.connect();
+            }
+        });
+
+        this.socket.on('routeUpdate', (routeData) => {
+            console.log('Received route update:', routeData);
+            this._routeUpdateHandlers.forEach(handler => handler(routeData));
+        });
     }
 
-    onLocationUpdate(callback) {
-        this.connection.on('LocationUpdated', callback);
+    // Event handler registration methods
+    onConnect(handler) {
+        this._connectHandlers.push(handler);
+        // Nếu đã kết nối, gọi handler ngay lập tức
+        if (this.socket.connected) {
+            handler();
+        }
     }
 
-    onOrderStatusUpdate(callback) {
-        this.connection.on('OrderStatusUpdated', callback);
+    onDisconnect(handler) {
+        this._disconnectHandlers.push(handler);
     }
 
-    updateLocation(vehicleId, location) {
-        this.connection.invoke('UpdateLocation', vehicleId, location);
+    onRouteUpdate(handler) {
+        this._routeUpdateHandlers.push(handler);
     }
 
-    updateOrderStatus(orderId, status) {
-        this.connection.invoke('UpdateOrderStatus', orderId, status);
+    // Event handler removal methods
+    offConnect(handler) {
+        this._connectHandlers = this._connectHandlers.filter(h => h !== handler);
+    }
+
+    offDisconnect(handler) {
+        this._disconnectHandlers = this._disconnectHandlers.filter(h => h !== handler);
+    }
+
+    offRouteUpdate(handler) {
+        this._routeUpdateHandlers = this._routeUpdateHandlers.filter(h => h !== handler);
+    }
+
+    // Connection management methods
+    connect() {
+        if (!this.socket.connected) {
+            console.log('Initiating socket connection...');
+            this.socket.connect();
+        }
+    }
+
+    disconnect() {
+        if (this.socket.connected) {
+            console.log('Disconnecting socket...');
+            this.socket.disconnect();
+        }
+    }
+
+    isConnected() {
+        return this.socket.connected;
+    }
+
+    // Đăng ký user với server để nhận cập nhật đơn hàng
+    registerUser(userId) {
+        if (this.socket && this.socket.connected) {
+            this.socket.emit('registerUser', userId);
+            console.log('registerUser emitted:', userId);
+        } else {
+            // Nếu socket chưa kết nối, đợi kết nối xong rồi emit
+            this.onConnect(() => {
+                this.socket.emit('registerUser', userId);
+                console.log('registerUser emitted (delayed):', userId);
+            });
+        }
+    }
+
+    // Clean up method
+    cleanup() {
+        this._connectHandlers = [];
+        this._disconnectHandlers = [];
+        this._routeUpdateHandlers = [];
+        this.disconnect();
     }
 }
 
-export default new SignalRService();
+const signalRService = new SignalRService();
+export default signalRService;

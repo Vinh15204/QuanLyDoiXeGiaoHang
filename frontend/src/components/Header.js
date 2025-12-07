@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import '../styles/Header.css';
 
 function Header() {
   const navigate = useNavigate();
@@ -27,6 +28,18 @@ function Header() {
             onClick={() => navigate(`${baseRoute}/info`)}
           >
             Thông tin
+          </button>
+          <button 
+            className={`nav-button ${location.pathname.includes('/vehicles') ? 'active' : ''}`}
+            onClick={() => navigate(`${baseRoute}/vehicles`)}
+          >
+            Quản lý đội xe
+          </button>
+          <button 
+            className={`nav-button ${location.pathname.includes('/orders') ? 'active' : ''}`}
+            onClick={() => navigate(`${baseRoute}/orders`)}
+          >
+            Quản lý đơn hàng
           </button>
         </>
       );

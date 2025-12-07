@@ -1,0 +1,218 @@
+{
+  "vehicles": [
+    {
+      "status": "available",
+      "currentLoad": 0,
+      "_id": "68532d1b86411d224b2a7f40",
+      "id": 1,
+      "position": [
+        21.0019,
+        105.8
+      ],
+      "maxLoad": 120
+    },
+    {
+      "status": "available",
+      "currentLoad": 0,
+      "_id": "68532d1b86411d224b2a7f41",
+      "id": 2,
+      "position": [
+        20.9578,
+        105.8245
+      ],
+      "maxLoad": 100
+    }
+  ],
+  "orders": [
+    {
+      "_id": "68532d2886411d224b2a7f46",
+      "id": 1,
+      "senderId": 1,
+      "receiverId": 2,
+      "pickup": [
+        21.0019,
+        105.8
+      ],
+      "delivery": [
+        20.9578,
+        105.8245
+      ],
+      "weight": 15,
+      "status": "pending",
+      "driverId": null,
+      "createdAt": "2025-06-18T21:26:25.063Z",
+      "updatedAt": "2025-06-18T21:26:25.063Z"
+    },
+    {
+      "_id": "68532d2886411d224b2a7f47",
+      "id": 2,
+      "senderId": 2,
+      "receiverId": 3,
+      "pickup": [
+        21.0452,
+        105.7598
+      ],
+      "delivery": [
+        20.9756,
+        105.8532
+      ],
+      "weight": 10,
+      "status": "pending",
+      "driverId": null,
+      "createdAt": "2025-06-18T21:26:25.063Z",
+      "updatedAt": "2025-06-18T21:26:25.063Z"
+    },
+    {
+      "_id": "68532d2886411d224b2a7f48",
+      "id": 3,
+      "senderId": 3,
+      "receiverId": 4,
+      "pickup": [
+        21.0278,
+        105.7789
+      ],
+      "delivery": [
+        20.9623,
+        105.7654
+      ],
+      "weight": 12,
+      "status": "pending",
+      "driverId": null,
+      "createdAt": "2025-06-18T21:26:25.063Z",
+      "updatedAt": "2025-06-18T21:26:25.063Z"
+    },
+    {
+      "_id": "68532d2886411d224b2a7f49",
+      "id": 4,
+      "senderId": 4,
+      "receiverId": 5,
+      "pickup": [
+        21.0123,
+        105.8397
+      ],
+      "delivery": [
+        20.9871,
+        105.7612
+      ],
+      "weight": 8,
+      "status": "pending",
+      "driverId": null,
+      "createdAt": "2025-06-18T21:26:25.063Z",
+      "updatedAt": "2025-06-18T21:26:25.063Z"
+    },
+    {
+      "_id": "68532d2886411d224b2a7f4a",
+      "id": 5,
+      "senderId": 5,
+      "receiverId": 1,
+      "pickup": [
+        21.0389,
+        105.8221
+      ],
+      "delivery": [
+        20.9704,
+        105.7998
+      ],
+      "weight": 15,
+      "status": "pending",
+      "driverId": null,
+      "createdAt": "2025-06-18T21:26:25.063Z",
+      "updatedAt": "2025-06-18T21:26:25.063Z"
+    },
+    {
+      "_id": "68532d2886411d224b2a7f4b",
+      "id": 6,
+      "senderId": 1,
+      "receiverId": 3,
+      "pickup": [
+        21.0496,
+        105.8145
+      ],
+      "delivery": [
+        20.9943,
+        105.7456
+      ],
+      "weight": 20,
+      "status": "pending",
+      "driverId": null,
+      "createdAt": "2025-06-18T21:26:25.063Z",
+      "updatedAt": "2025-06-18T21:26:25.063Z"
+    },
+    {
+      "_id": "68532d2886411d224b2a7f4c",
+      "id": 7,
+      "senderId": 2,
+      "receiverId": 4,
+      "pickup": [
+        20.9667,
+        105.8498
+      ],
+      "delivery": [
+        21.0034,
+        105.7732
+      ],
+      "weight": 18,
+      "status": "pending",
+      "driverId": null,
+      "createdAt": "2025-06-18T21:26:25.063Z",
+      "updatedAt": "2025-06-18T21:26:25.063Z"
+    },
+    {
+      "_id": "68532d2886411d224b2a7f4d",
+      "id": 8,
+      "senderId": 3,
+      "receiverId": 5,
+      "pickup": [
+        21.0156,
+        105.7812
+      ],
+      "delivery": [
+        20.9789,
+        105.8267
+      ],
+      "weight": 11,
+      "status": "pending",
+      "driverId": null,
+      "createdAt": "2025-06-18T21:26:25.063Z",
+      "updatedAt": "2025-06-18T21:26:25.063Z"
+    },
+    {
+      "_id": "68532d2886411d224b2a7f4e",
+      "id": 9,
+      "senderId": 4,
+      "receiverId": 1,
+      "pickup": [
+        20.9901,
+        105.7589
+      ],
+      "delivery": [
+        21.0412,
+        105.7654
+      ],
+      "weight": 14,
+      "status": "pending",
+      "driverId": null,
+      "createdAt": "2025-06-18T21:26:25.063Z",
+      "updatedAt": "2025-06-18T21:26:25.063Z"
+    },
+    {
+      "_id": "68532d2886411d224b2a7f4f",
+      "id": 10,
+      "senderId": 5,
+      "receiverId": 2,
+      "pickup": [
+        21.0256,
+        105.8445
+      ],
+      "delivery": [
+        20.9723,
+        105.7921
+      ],
+      "weight": 16,
+      "status": "pending",
+      "driverId": null,
+      "createdAt": "2025-06-18T21:26:25.063Z",
+      "updatedAt": "2025-06-18T21:26:25.063Z"
+    }
+  ]
+}
