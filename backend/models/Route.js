@@ -2,34 +2,58 @@ const mongoose = require('mongoose');
 
 const routeSchema = new mongoose.Schema({
     vehicleId: {
-        type: String,
+        type: Number,
         required: true,
         index: true
     },
+    // Vị trí hiện tại của xe (có thể khác với vehiclePosition ban đầu)
     currentPosition: {
+        type: [Number],
+        validate: {
+            validator: function(v) {
+                return !v || (v.length === 2 && !v.some(isNaN));
+            },
+            message: 'Current position must be [latitude, longitude]'
+        }
+    },
+    // Vị trí ban đầu của xe khi tạo route
+    vehiclePosition: {
         type: [Number],
         required: true,
         validate: {
             validator: function(v) {
                 return v.length === 2 && !v.some(isNaN);
             },
-            message: 'Current position must be [latitude, longitude]'
+            message: 'Vehicle position must be [latitude, longitude]'
         }
     },
+    // Mảng các tọa độ tạo thành đường đi (dùng để vẽ Polyline)
+    path: {
+        type: [[Number]],
+        required: true,
+        validate: {
+            validator: function(v) {
+                return Array.isArray(v) && v.every(point => 
+                    Array.isArray(point) && point.length === 2 && !point.some(isNaN)
+                );
+            },
+            message: 'Path must be an array of [latitude, longitude] coordinates'
+        }
+    },
+    // Danh sách ID đơn hàng được phân công
+    assignedOrders: {
+        type: [Number],
+        default: []
+    },
+    // Các điểm dừng trên tuyến đường
     stops: [{
         type: {
             type: String,
-            enum: ['pickup', 'delivery'],
+            enum: ['pickup', 'delivery', 'depot'],
             required: true
         },
-        orderId: {
-            type: String,
-            required: true
-        },
-        userId: {
-            type: String,
-            required: true
-        },
+        orderId: Number,
+        userId: String,
         point: {
             type: [Number],
             required: true,
@@ -42,18 +66,54 @@ const routeSchema = new mongoose.Schema({
         },
         arrivalTime: Number,
         serviceTime: Number,
-        load: Number
+        load: Number,
+        pickupAddress: String,
+        deliveryAddress: String
     }],
+    // Thông tin chi tiết về tuyến đường
+    routeDetails: {
+        type: mongoose.Schema.Types.Mixed,
+        default: []
+    },
+    // Khoảng cách tổng (km)
+    distance: {
+        type: Number,
+        default: 0
+    },
+    // Thời gian tổng (phút)
+    duration: {
+        type: Number,
+        default: 0
+    },
+    // Tổng trọng tải
+    totalWeight: {
+        type: Number,
+        default: 0
+    },
+    // Legacy fields
     totalDistance: Number,
     totalTime: Number,
-    lastUpdated: {
-        type: Date,
-        default: Date.now
+    // Trạng thái
+    status: {
+        type: String,
+        enum: ['active', 'completed', 'cancelled'],
+        default: 'active'
     },
     isActive: {
         type: Boolean,
         default: true
+    },
+    lastUpdated: {
+        type: Date,
+        default: Date.now
+    },
+    timestamp: {
+        type: Date,
+        default: Date.now
     }
+}, {
+    // Cho phép lưu các field không có trong schema (flexible)
+    strict: false
 });
 
 // Compound index for queries

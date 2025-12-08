@@ -125,6 +125,13 @@ function AdminDashboard() {
         orders: orders.length
       });
 
+      // Clear cached routes before optimization
+      sessionStorage.removeItem('cachedRoutes');
+      sessionStorage.removeItem('cacheTime');
+      // Set flag to force refresh
+      sessionStorage.setItem('forceRefreshRoutes', 'true');
+      console.log('🗑️ Cleared route cache and set force refresh flag');
+
       // Call optimization API
       const response = await fetch(`${API_BASE_URL}/api/optimize`, {
         method: 'POST',

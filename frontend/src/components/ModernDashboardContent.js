@@ -194,6 +194,19 @@ function ModernDashboard() {
                     console.log('🔍 Routes length:', routes.length);
                     
                     if (routes.length > 0) {
+                        // Log path information for debugging
+                        routes.forEach((route, idx) => {
+                            console.log(`🗺️ Route ${idx + 1} (Vehicle ${route.vehicleId}):`, {
+                                hasPath: !!route.path,
+                                pathType: Array.isArray(route.path) ? 'array' : typeof route.path,
+                                pathLength: route.path?.length || 0,
+                                firstPoint: route.path?.[0],
+                                lastPoint: route.path?.[route.path?.length - 1],
+                                distance: route.distance,
+                                duration: route.duration
+                            });
+                        });
+                        
                         // Cache the routes
                         sessionStorage.setItem('cachedRoutes', JSON.stringify(routes));
                         sessionStorage.setItem('cacheTime', Date.now().toString());
@@ -265,8 +278,42 @@ function ModernDashboard() {
         if (!currentUser) {
             navigate('/login');
         } else {
-            fetchData();
+            // Check if we should force refresh (after optimization)
+            const shouldForceRefresh = sessionStorage.getItem('forceRefreshRoutes');
+            if (shouldForceRefresh === 'true') {
+                console.log('🔄 Force refreshing routes after optimization');
+                sessionStorage.removeItem('forceRefreshRoutes');
+                fetchData(true); // Force refresh
+            } else {
+                fetchData();
+            }
         }
+        
+        // Listen for visibility change to auto-refresh when tab becomes visible
+        const handleVisibilityChange = () => {
+            if (!document.hidden && sessionStorage.getItem('forceRefreshRoutes') === 'true') {
+                console.log('🔄 Tab visible again, force refreshing routes');
+                sessionStorage.removeItem('forceRefreshRoutes');
+                fetchData(true);
+            }
+        };
+        
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        
+        // Poll for force refresh flag every 2 seconds
+        const pollInterval = setInterval(() => {
+            if (sessionStorage.getItem('forceRefreshRoutes') === 'true') {
+                console.log('🔄 Detected force refresh flag, refreshing routes');
+                sessionStorage.removeItem('forceRefreshRoutes');
+                fetchData(true);
+            }
+        }, 2000);
+        
+        // Cleanup
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            clearInterval(pollInterval);
+        };
         // Run only once on mount - currentUser is from initial state
         // eslint-disable-next-line
     }, []); // Empty deps - only run on mount
@@ -492,7 +539,14 @@ function ModernDashboard() {
                                 ))}
                                 
                                 {/* Render optimized routes */}
-                                {visibleRoutesData.map((route, index) => (
+                                {visibleRoutesData.map((route, index) => {
+                                    // Validate path before rendering
+                                    if (!route.path || !Array.isArray(route.path) || route.path.length < 2) {
+                                        console.error(`❌ Invalid path for route ${route.vehicleId}:`, route.path);
+                                        return null;
+                                    }
+                                    
+                                    return (
                                     <React.Fragment key={`route-${route.vehicleId}`}>
                                         {/* Route line */}
                                         <Polyline
@@ -504,10 +558,11 @@ function ModernDashboard() {
                                                 <Popup>
                                                     <div>
                                                         <h4>Route - Xe {route.vehicleId}</h4>
-                                                        <p>Khoảng cách: {route.distance.toFixed(2)} km</p>
-                                                        <p>Thời gian: {Math.round(route.duration)} phút</p>
-                                                        <p>Số điểm dừng: {route.stats.totalStops}</p>
-                                                        <p>Tải trọng: {route.stats.loadRatio}%</p>
+                                                        <p>Khoảng cách: {(route.distance || 0).toFixed(2)} km</p>
+                                                        <p>Thời gian: {Math.round(route.duration || 0)} phút</p>
+                                                        <p>Số điểm dừng: {route.stops?.length || 0}</p>
+                                                        <p>Số đơn hàng: {route.assignedOrders?.length || 0}</p>
+                                                        <p>Tải trọng: {route.totalWeight || 0} kg</p>
                                                     </div>
                                                 </Popup>
                                             </Polyline>
@@ -599,7 +654,8 @@ function ModernDashboard() {
                                                 );
                                             })}
                                     </React.Fragment>
-                                ))}
+                                    );
+                                })}
                             </MapContainer>
                         </div>
 

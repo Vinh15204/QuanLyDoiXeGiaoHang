@@ -44,6 +44,13 @@ router.post('/', async (req, res) => {
             });
         }
 
+        // Delete all existing routes before creating new ones
+        console.log('🗑️ Deleting all existing routes...');
+        const existingRoutes = await Route.find({});
+        console.log(`📊 Found ${existingRoutes.length} existing routes:`, existingRoutes.map(r => ({ vehicleId: r.vehicleId, isActive: r.isActive })));
+        const deleteResult = await Route.deleteMany({});
+        console.log(`✅ Deleted ${deleteResult.deletedCount} existing routes`);
+
         // Start optimization
         console.log('Starting optimization...');
         const optimizationResult = await optimizer.assignOrders(vehicles, orders);
@@ -67,6 +74,14 @@ router.post('/', async (req, res) => {
                 const routeInfo = optimizer.generateRouteDetails(vehicle, vehicleOrders, routeDetails[vehicleId]);
                 const osrmResult = await optimizer.getOsrmRoute(route);
 
+                console.log(`📍 Vehicle ${vehicleId} route building:`, {
+                    baseRoutePoints: route.length,
+                    osrmRoutePoints: osrmResult.route?.length || 0,
+                    willUsePath: osrmResult.route ? 'OSRM route' : 'base route',
+                    firstPoint: (osrmResult.route || route)[0],
+                    lastPoint: (osrmResult.route || route)[(osrmResult.route || route).length - 1]
+                });
+
                 // Create route data
                 const routeData = {
                     vehicleId: parseInt(vehicleId),
@@ -79,15 +94,24 @@ router.post('/', async (req, res) => {
                     stops: routeDetails[vehicleId] || [],
                     vehiclePosition: vehicle.position,
                     status: 'active',
+                    isActive: true,
+                    lastUpdated: new Date(),
                     timestamp: new Date()
                 };
 
                 // Save to database
-                await Route.findOneAndUpdate(
+                const savedRoute = await Route.findOneAndUpdate(
                     { vehicleId: parseInt(vehicleId) },
                     routeData,
                     { upsert: true, new: true }
                 );
+                
+                console.log(`✅ Saved route for vehicle ${vehicleId}:`, {
+                    vehicleId: savedRoute.vehicleId,
+                    isActive: savedRoute.isActive,
+                    ordersCount: savedRoute.assignedOrders.length,
+                    pathLength: savedRoute.path.length
+                });
 
                 routes.push(routeData);
 
