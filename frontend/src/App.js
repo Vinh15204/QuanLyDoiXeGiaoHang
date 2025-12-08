@@ -9,6 +9,8 @@ import {
 import Login from "./components/Login";
 import UserPage from "./components/UserPage";
 import DriverPage from "./components/DriverPage";
+import DriverOrders from "./components/DriverOrders";
+import DriverDelivered from "./components/DriverDelivered";
 import ModernDashboardContent from "./components/ModernDashboardContent";
 import DashboardLayout from "./components/DashboardLayout";
 import VehiclesManagementNew from "./components/VehiclesManagementNew";
@@ -53,7 +55,10 @@ function App() {
           </RouteProvider>
         } />
         
-        <Route path="/driver/*" element={<DriverPage />} />
+        {/* Driver routes */}
+        <Route path="/driver" element={<DriverPage />} />
+        <Route path="/driver/orders" element={<DriverOrders />} />
+        <Route path="/driver/delivered" element={<DriverDelivered />} />
         
         {/* Root route - redirect based on login status */}
         <Route path="/" element={

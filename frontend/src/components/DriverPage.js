@@ -33,8 +33,10 @@ function DriverPage() {
     const [currentPosition, setCurrentPosition] = useState(null);
     const [selectedStop, setSelectedStop] = useState(null);
     const [mapCenter, setMapCenter] = useState(null);
+    const [viewMode, setViewMode] = useState('map'); // 'map' or 'list'
+    const [orders, setOrders] = useState([]);
 
-    // Load saved route from localStorage or fetch from API
+    // Load saved route - ALWAYS fetch from API first for latest data
     useEffect(() => {
         console.log('🚗 Current driver:', currentDriver);
         console.log('🔑 Vehicle ID:', currentDriver?.vehicleId);
@@ -45,52 +47,105 @@ function DriverPage() {
                 return;
             }
 
-            // Try localStorage first
-            const savedRoute = localStorage.getItem(`driverRoute_${currentDriver.vehicleId}`);
-            console.log('💾 Saved route:', savedRoute ? 'Found' : 'Not found');
-            
-            if (savedRoute) {
-                const parsedRoute = JSON.parse(savedRoute);
-                console.log('📍 Parsed route from localStorage:', parsedRoute);
-                console.log('📍 Total stops:', parsedRoute.stops?.length);
-                console.log('📍 Stops breakdown:', {
-                    depot: parsedRoute.stops?.filter(s => s.type === 'depot').length,
-                    pickup: parsedRoute.stops?.filter(s => s.type === 'pickup').length,
-                    delivery: parsedRoute.stops?.filter(s => s.type === 'delivery').length
-                });
-                setRoute(parsedRoute);
-            } else {
-                // Fetch from API if not in localStorage
-                console.log('🌐 Fetching route from API...');
-                try {
-                    const response = await fetch(`${API_BASE_URL}/api/optimize/route/${currentDriver.vehicleId}`);
+            // ALWAYS fetch from API first to get latest route
+            console.log('🌐 Fetching latest route from API...');
+            try {
+                // Fetch all routes and find the one for this vehicle
+                const response = await fetch(`${API_BASE_URL}/api/routes?t=${Date.now()}`);
                     if (response.ok) {
                         const data = await response.json();
-                        console.log('✅ Fetched route from API:', data.route);
-                        console.log('📍 Total stops:', data.route?.stops?.length);
-                        console.log('📍 Stops breakdown:', {
-                            depot: data.route?.stops?.filter(s => s.type === 'depot').length,
-                            pickup: data.route?.stops?.filter(s => s.type === 'pickup').length,
-                            delivery: data.route?.stops?.filter(s => s.type === 'delivery').length
-                        });
-                        if (data.route) {
-                            setRoute(data.route);
+                        console.log('✅ Fetched routes from API:', data);
+                        
+                        // Find route for current driver's vehicle
+                        const routes = data.routes || data || [];
+                        const driverRoute = routes.find(r => r.vehicleId === currentDriver.vehicleId);
+                        
+                        if (driverRoute) {
+                            console.log('✅ Found route for vehicle:', driverRoute);
+                            console.log('📍 Total stops:', driverRoute.stops?.length);
+                            console.log('📍 Stops breakdown:', {
+                                depot: driverRoute.stops?.filter(s => s.type === 'depot').length,
+                                pickup: driverRoute.stops?.filter(s => s.type === 'pickup').length,
+                                delivery: driverRoute.stops?.filter(s => s.type === 'delivery').length
+                            });
+                            setRoute(driverRoute);
                             // Save to localStorage
-                            localStorage.setItem(`driverRoute_${currentDriver.vehicleId}`, JSON.stringify(data.route));
+                            localStorage.setItem(`driverRoute_${currentDriver.vehicleId}`, JSON.stringify(driverRoute));
                             console.log('💾 Route saved to localStorage');
+                        } else {
+                            console.log('ℹ️ No route assigned yet for vehicle:', currentDriver.vehicleId);
                         }
-                    } else if (response.status === 404) {
-                        console.log('ℹ️ No route assigned yet');
-                    } else {
-                        console.error('❌ Error fetching route:', response.statusText);
-                    }
-                } catch (error) {
-                    console.error('❌ Error fetching route:', error);
+                } else {
+                    console.error('❌ Error fetching routes:', response.statusText);
+                }
+            } catch (error) {
+                console.error('❌ Error fetching routes:', error);
+                // Fallback to localStorage if API fails
+                const savedRoute = localStorage.getItem(`driverRoute_${currentDriver.vehicleId}`);
+                if (savedRoute) {
+                    console.log('⚠️ Using cached route from localStorage');
+                    setRoute(JSON.parse(savedRoute));
                 }
             }
         };
 
         loadRoute();
+    }, [currentDriver]);
+
+    // Fetch orders assigned to this driver
+    useEffect(() => {
+        const fetchOrders = async () => {
+            if (!currentDriver?.vehicleId) return;
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/orders?driverId=${currentDriver.vehicleId}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setOrders(data);
+                    console.log('✅ Loaded orders:', data.length);
+                }
+            } catch (error) {
+                console.error('Error fetching orders:', error);
+            }
+        };
+
+        fetchOrders();
+        // Refresh orders every 30 seconds
+        const interval = setInterval(fetchOrders, 30000);
+        return () => clearInterval(interval);
+    }, [currentDriver]);
+
+    // Auto-refresh when tab becomes visible
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (!document.hidden && currentDriver?.vehicleId) {
+                console.log('🔄 Tab visible, checking for route updates...');
+                // Clear localStorage cache
+                localStorage.removeItem(`driverRoute_${currentDriver.vehicleId}`);
+                // Trigger reload by fetching from API
+                const fetchRoute = async () => {
+                    try {
+                        const response = await fetch(`${API_BASE_URL}/api/routes`);
+                        if (response.ok) {
+                            const data = await response.json();
+                            const routes = data.routes || data || [];
+                            const driverRoute = routes.find(r => r.vehicleId === currentDriver.vehicleId);
+                            if (driverRoute) {
+                                console.log('✅ Route updated');
+                                setRoute(driverRoute);
+                                localStorage.setItem(`driverRoute_${currentDriver.vehicleId}`, JSON.stringify(driverRoute));
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error fetching route:', error);
+                    }
+                };
+                fetchRoute();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
     }, [currentDriver]);
 
     // SignalR connection
@@ -147,9 +202,82 @@ function DriverPage() {
         return route?.assignedOrders?.length || 0;
     };
 
+    const handleUpdateOrderStatus = async (orderId, newStatus) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/status`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+
+            if (response.ok) {
+                // Refresh orders
+                const ordersRes = await fetch(`${API_BASE_URL}/api/orders?driverId=${currentDriver.vehicleId}`);
+                if (ordersRes.ok) {
+                    const data = await ordersRes.json();
+                    setOrders(data);
+                }
+                alert(`Đã cập nhật trạng thái đơn hàng #${orderId}`);
+            } else {
+                alert('Có lỗi xảy ra khi cập nhật trạng thái');
+            }
+        } catch (error) {
+            console.error('Error updating order status:', error);
+            alert('Có lỗi xảy ra: ' + error.message);
+        }
+    };
+
+    const getStatusBadgeClass = (status) => {
+        const statusMap = {
+            'pending': 'status-pending',
+            'approved': 'status-approved',
+            'assigned': 'status-assigned',
+            'in_transit': 'status-in-transit',
+            'picked': 'status-picked',
+            'delivering': 'status-delivering',
+            'delivered': 'status-delivered',
+            'cancelled': 'status-cancelled'
+        };
+        return statusMap[status] || 'status-pending';
+    };
+
+    const getStatusLabel = (status) => {
+        const labels = {
+            'pending': 'Chờ duyệt',
+            'approved': 'Đã duyệt',
+            'assigned': 'Đã phân công',
+            'in_transit': 'Đang lấy hàng',
+            'picked': 'Đã lấy hàng',
+            'delivering': 'Đang giao',
+            'delivered': 'Đã giao',
+            'cancelled': 'Đã hủy'
+        };
+        return labels[status] || status;
+    };
+
+    const getNextActions = (status) => {
+        const actions = {
+            'assigned': [
+                { label: 'Bắt đầu lấy hàng', status: 'in_transit', icon: '🚗' }
+            ],
+            'in_transit': [
+                { label: 'Đã lấy hàng', status: 'picked', icon: '📦' }
+            ],
+            'picked': [
+                { label: 'Đang giao hàng', status: 'delivering', icon: '🚚' }
+            ],
+            'delivering': [
+                { label: 'Đã giao thành công', status: 'delivered', icon: '✅' },
+                { label: 'Hủy đơn', status: 'cancelled', icon: '❌' }
+            ]
+        };
+        return actions[status] || [];
+    };
+
     const sidebarItems = [
         { name: 'Tuyến đường', icon: '🗺️', path: '/driver' },
-        { name: 'Lịch sử', icon: '📋', path: '/driver/history' },
+        { name: 'Đơn hàng', icon: '📦', path: '/driver/orders' },
+        { name: 'Đã giao', icon: '✅', path: '/driver/delivered' },
         { name: 'Cài đặt', icon: '⚙️', path: '/driver/settings' }
     ];
 
@@ -200,6 +328,21 @@ function DriverPage() {
                         <p>Xem chi tiết lộ trình và các điểm giao hàng</p>
                     </div>
                     <div className="header-right">
+                        <button 
+                            onClick={() => window.location.reload()}
+                            style={{
+                                padding: '8px 16px',
+                                marginRight: '10px',
+                                background: '#3b82f6',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                fontSize: '14px'
+                            }}
+                        >
+                            🔄 Kiểm tra lại
+                        </button>
                         <div className={`status-badge ${isConnected ? 'status-active' : 'status-inactive'}`}>
                             <span className="status-dot"></span>
                             {isConnected ? 'Đã kết nối' : 'Mất kết nối'}
@@ -210,7 +353,7 @@ function DriverPage() {
                 {/* Dashboard Content */}
                 <div className="dashboard-content">
 
-                    {/* Map Container */}
+                    {/* Map View */}
                     <div className="map-section">
                         {!currentDriver?.vehicleId ? (
                             <div className="empty-state">
@@ -329,6 +472,13 @@ function DriverPage() {
                                 <div className="empty-icon">🗺️</div>
                                 <h3>Chưa có tuyến đường</h3>
                                 <p>Bạn chưa được phân công tuyến đường nào</p>
+                                <div style={{ marginTop: '16px', padding: '16px', background: '#f3f4f6', borderRadius: '8px', fontSize: '13px', textAlign: 'left' }}>
+                                    <strong>Debug Info:</strong><br/>
+                                    Vehicle ID: {currentDriver?.vehicleId || 'null'}<br/>
+                                    LocalStorage Key: driverRoute_{currentDriver?.vehicleId}<br/>
+                                    Route Status: {localStorage.getItem(`driverRoute_${currentDriver?.vehicleId}`) ? 'Not found' : 'Not found'}<br/>
+                                    Connected: {isConnected ? 'Yes' : 'No'}
+                                </div>
                                 <button 
                                     onClick={() => {
                                         console.log('🔄 Checking for routes...');

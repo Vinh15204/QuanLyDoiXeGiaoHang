@@ -43,23 +43,48 @@ const OrderSchema = new mongoose.Schema({
     },
     status: { 
         type: String,
-        enum: ['pending', 'assigned', 'picked', 'delivered', 'cancelled'],
+        enum: ['pending', 'approved', 'assigned', 'in_transit', 'picked', 'delivering', 'delivered', 'cancelled'],
         default: 'pending'
     },
     driverId: {
         type: Number,
         index: true
     },
+    // Phân biệt gán thủ công hay tự động
+    assignmentType: {
+        type: String,
+        enum: ['manual', 'auto'],
+        default: null
+    },
+    // Địa chỉ dạng text
+    pickupAddress: {
+        type: String,
+        default: ''
+    },
+    deliveryAddress: {
+        type: String,
+        default: ''
+    },
+    // Thời gian
     pickupTime: Date,
     deliveryTime: Date,
+    approvedAt: Date,
+    assignedAt: Date,
+    startedAt: Date,
+    completedAt: Date,
+    cancelledAt: Date,
     createdAt: {
         type: Date,
-        default: Date.now
+        default: Date.now,
+        index: true
     },
     updatedAt: {
         type: Date,
         default: Date.now
-    }
+    },
+    // Ghi chú
+    notes: String,
+    cancelReason: String
 });
 
 // Add compound indexes
@@ -90,23 +115,46 @@ OrderSchema.methods = {
     
     updateStatus: function(newStatus) {
         const validTransitions = {
-            'pending': ['assigned', 'cancelled'],
-            'assigned': ['picked', 'cancelled'],
-            'picked': ['delivered', 'cancelled'],
+            'pending': ['approved', 'cancelled'],
+            'approved': ['assigned', 'cancelled'],
+            'assigned': ['in_transit', 'cancelled'],
+            'in_transit': ['picked', 'cancelled'],
+            'picked': ['delivering', 'cancelled'],
+            'delivering': ['delivered', 'cancelled'],
             'delivered': [],
             'cancelled': []
         };
         
-        if (!validTransitions[this.status].includes(newStatus)) {
+        if (!validTransitions[this.status]?.includes(newStatus)) {
             throw new Error(`Invalid status transition from ${this.status} to ${newStatus}`);
         }
         
+        const now = new Date();
         this.status = newStatus;
-        if (newStatus === 'picked') {
-            this.pickupTime = new Date();
-        } else if (newStatus === 'delivered') {
-            this.deliveryTime = new Date();
+        
+        // Cập nhật thời gian tương ứng
+        switch(newStatus) {
+            case 'approved':
+                this.approvedAt = now;
+                break;
+            case 'assigned':
+                this.assignedAt = now;
+                break;
+            case 'in_transit':
+                this.startedAt = now;
+                break;
+            case 'picked':
+                this.pickupTime = now;
+                break;
+            case 'delivered':
+                this.deliveryTime = now;
+                this.completedAt = now;
+                break;
+            case 'cancelled':
+                this.cancelledAt = now;
+                break;
         }
+        this.updatedAt = now;
     }
 };
 

@@ -24,28 +24,34 @@ async function getOsrmRoute(points) {
             return `${p[1]},${p[0]}`;
         }).join(';');
 
-        console.log('Calling OSRM with coordinates:', coordinates);
         const url = `http://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`;
-        const response = await axios.get(url);
+        console.log(`🌐 Calling OSRM with ${points.length} points...`);
+        
+        const response = await axios.get(url, { timeout: 10000 }); // 10s timeout
         
         if (response.data.code !== 'Ok') {
-            console.error('OSRM response not OK:', response.data);
-            throw new Error('OSRM request failed');
+            console.error('❌ OSRM response not OK:', response.data);
+            throw new Error('OSRM request failed: ' + response.data.code);
         }
 
         const route = response.data.routes[0];
+        const osrmPath = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+        
+        console.log(`✅ OSRM returned route with ${osrmPath.length} points, distance: ${(route.distance/1000).toFixed(2)}km`);
+        
         return {
-            route: route.geometry.coordinates.map(coord => [coord[1], coord[0]]),
+            route: osrmPath,
             distance: route.distance / 1000, // Convert to km
             duration: route.duration / 60 // Convert to minutes
         };
     } catch (error) {
-        console.error('Error getting OSRM route:', error);
+        console.error('⚠️ OSRM failed, using straight-line fallback:', error.message);
+        console.error('   Points attempted:', points.length);
         // Fallback: calculate straight-line distance
         const distance = calculateDistance(points);
         const duration = (distance / 30) * 60; // Assume 30 km/h average speed
         return {
-            route: points,
+            route: points, // Straight line fallback
             distance,
             duration
         };
@@ -273,10 +279,11 @@ function* generateAllAssignments(orders, vehicleIds) {
 }
 
 // Hàm chính để phân công đơn hàng cho xe
-async function assignOrders(vehicles, orders) {
-    // Nếu số lượng lớn, dùng heuristic
-    if (orders.length > 12 || vehicles.length > 6) {
-        return heuristicAssignOrders(vehicles, orders);
+async function assignOrders(vehicles, orders, manualConstraints = {}) {
+    // Always use heuristic when there are manual constraints
+    // OR if the problem size is large
+    if (Object.keys(manualConstraints).length > 0 || orders.length > 12 || vehicles.length > 6) {
+        return heuristicAssignOrders(vehicles, orders, manualConstraints);
     }
 
     const vehicleIds = vehicles.map(v => v.id);
@@ -343,7 +350,7 @@ function findBestNextStop(currentPos, stops, currentLoad, maxLoad) {
 }
 
 // Thuật toán tham lam cho số lượng lớn
-function heuristicAssignOrders(vehicles, orders) {
+function heuristicAssignOrders(vehicles, orders, manualConstraints = {}) {
     // Validate input
     if (!Array.isArray(vehicles) || !Array.isArray(orders)) {
         console.error('Invalid input:', { vehicles, orders });
@@ -351,7 +358,8 @@ function heuristicAssignOrders(vehicles, orders) {
     }
 
     // Log input data
-    console.log('Starting assignment with:', {
+    console.log('Starting assignment with constraints:', {
+        manualConstraints,
         numVehicles: vehicles.length,
         vehicleIds: vehicles.map(v => v.id),
         numOrders: orders.length,
@@ -373,8 +381,44 @@ function heuristicAssignOrders(vehicles, orders) {
         vehicleTimes[v.id] = 0;
     });
 
+    // First, assign manual constraints
+    for (const [orderIdStr, vehicleId] of Object.entries(manualConstraints)) {
+        const orderId = parseInt(orderIdStr);
+        const order = orders.find(o => o.id === orderId);
+        const vehicle = vehicles.find(v => v.id === vehicleId);
+        
+        if (order && vehicle) {
+            console.log(`📌 Pre-assigning order ${orderId} to vehicle ${vehicleId} (manual constraint)`);
+            vehicleResults[vehicleId].push(order);
+            
+            // Add to route details
+            routeDetails[vehicleId].push({
+                type: 'pickup',
+                orderId: order.id,
+                point: order.pickup,
+                weight: order.weight
+            });
+            routeDetails[vehicleId].push({
+                type: 'delivery',
+                orderId: order.id,
+                point: order.delivery,
+                weight: order.weight
+            });
+            
+            vehicleLoads[vehicleId] += order.weight;
+            const routeStats = generateRouteDetails(vehicle, [], routeDetails[vehicleId]).stats;
+            vehicleTimes[vehicleId] = routeStats.totalTime;
+        }
+    }
+
+    // Get orders that are not manually constrained
+    const manualOrderIds = Object.keys(manualConstraints).map(id => parseInt(id));
+    const ordersToAssign = orders.filter(o => !manualOrderIds.includes(o.id));
+    
+    console.log(`Auto-assigning ${ordersToAssign.length} orders (${manualOrderIds.length} already assigned manually)`);
+
     // Sắp xếp đơn hàng theo trọng lượng giảm dần
-    const sortedOrders = [...orders].sort((a, b) => b.weight - a.weight);
+    const sortedOrders = [...ordersToAssign].sort((a, b) => b.weight - a.weight);
 
     // Phân bổ từng đơn
     for (const order of sortedOrders) {
@@ -452,47 +496,52 @@ function heuristicAssignOrders(vehicles, orders) {
             }
         }
 
-        // Nếu tìm được xe phù hợp, cập nhật dữ liệu
-        if (bestVehicleId !== null) {
-            const vehicle = vehicles.find(v => v.id === bestVehicleId);
-            vehicleResults[bestVehicleId].push(order);
-            
-            // Cập nhật route details và tính toán lại thống kê
-            routeDetails[bestVehicleId].push({
-                type: 'pickup',
-                orderId: order.id,
-                point: order.pickup,
-                weight: order.weight
-            });
-
-            routeDetails[bestVehicleId].push({
-                type: 'delivery',
-                orderId: order.id,
-                point: order.delivery,
-                weight: order.weight
-            });
-
-            // Cập nhật tải trọng và thời gian từ route details
-            const routeStats = generateRouteDetails(vehicle, [], routeDetails[bestVehicleId]).stats;
-            vehicleLoads[bestVehicleId] = order.weight;
-            vehicleTimes[bestVehicleId] = routeStats.totalTime;
-
-            console.log(`✔ Assigned order #${order.id} to vehicle #${bestVehicleId}:`, {
-                currentLoad: vehicleLoads[bestVehicleId],
-                currentTime: vehicleTimes[bestVehicleId],
-                distance: routeStats.distance,
-                numStops: routeStats.numStops
-            });
-        } else {
-            console.warn(`❌ Could not assign order #${order.id}:`, {
-                weight: order.weight,
-                attempts: assignmentAttempts,
-                remainingCapacities: vehicles.map(v => ({
-                    vehicleId: v.id,
-                    remaining: v.maxLoad - vehicleLoads[v.id]
-                }))
-            });
+        // Nếu không tìm được xe phù hợp (vượt tải), gán vào xe có tải trọng thấp nhất
+        if (bestVehicleId === null) {
+            console.warn(`⚠️ No suitable vehicle found for order #${order.id}, assigning to least loaded vehicle`);
+            // Tìm xe có tải trọng thấp nhất
+            let minLoad = Infinity;
+            for (const vehicle of vehicles) {
+                if (vehicleLoads[vehicle.id] < minLoad) {
+                    minLoad = vehicleLoads[vehicle.id];
+                    bestVehicleId = vehicle.id;
+                }
+            }
         }
+
+        // Gán đơn vào xe (bestVehicleId luôn != null sau đoạn trên)
+        const vehicle = vehicles.find(v => v.id === bestVehicleId);
+        vehicleResults[bestVehicleId].push(order);
+        
+        // Cập nhật route details và tính toán lại thống kê
+        routeDetails[bestVehicleId].push({
+            type: 'pickup',
+            orderId: order.id,
+            point: order.pickup,
+            weight: order.weight
+        });
+
+        routeDetails[bestVehicleId].push({
+            type: 'delivery',
+            orderId: order.id,
+            point: order.delivery,
+            weight: order.weight
+        });
+
+        // Cập nhật tải trọng và thời gian từ route details
+        const routeStats = generateRouteDetails(vehicle, [], routeDetails[bestVehicleId]).stats;
+        vehicleLoads[bestVehicleId] += order.weight; // Cộng dồn trọng lượng
+        vehicleTimes[bestVehicleId] = routeStats.totalTime;
+
+        const isOverweight = vehicleLoads[bestVehicleId] > vehicle.maxLoad;
+        console.log(`✔ Assigned order #${order.id} to vehicle #${bestVehicleId}:`, {
+            currentLoad: vehicleLoads[bestVehicleId],
+            maxLoad: vehicle.maxLoad,
+            overweight: isOverweight,
+            currentTime: vehicleTimes[bestVehicleId],
+            distance: routeStats.distance,
+            numStops: routeStats.numStops
+        });
     }
 
     // Log kết quả phân công

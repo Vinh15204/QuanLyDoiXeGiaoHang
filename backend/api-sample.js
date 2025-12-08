@@ -63,6 +63,9 @@ initModels();
 // Mount routes
 app.use('/api/optimize', optimizeRoute);
 app.use('/api/geocode', geocodeRoute);
+app.use('/api/orders/manage', require('./routes/orders'));
+app.use('/api/drivers', require('./routes/drivers'));
+app.use('/api/statistics', require('./routes/statistics'));
 
 // Lấy danh sách xe
 app.get('/api/vehicles', async (req, res, next) => {
@@ -116,9 +119,41 @@ app.post('/api/vehicles', async (req, res, next) => {
 // Lấy danh sách đơn hàng
 app.get('/api/orders', async (req, res, next) => {
   try {
-    const orders = await Order.find();
+    const { 
+      status, 
+      driverId, 
+      senderId, 
+      receiverId,
+      startDate, 
+      endDate,
+      assignmentType 
+    } = req.query;
+
+    const query = {};
+    
+    if (status) query.status = status;
+    if (driverId) query.driverId = parseInt(driverId);
+    if (senderId) query.senderId = parseInt(senderId);
+    if (receiverId) query.receiverId = parseInt(receiverId);
+    if (assignmentType) query.assignmentType = assignmentType;
+    
+    // Filter theo ngày
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
+    }
+
+    console.log('📋 Fetching orders with query:', query);
+    const orders = await Order.find(query).sort({ createdAt: -1 });
+    console.log(`✅ Found ${orders.length} orders`);
     res.json(orders);
   } catch (err) {
+    console.error('Error fetching orders:', err);
     next(err);
   }
 });
@@ -205,6 +240,17 @@ app.post('/api/users', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// API endpoint để lấy tất cả routes
+app.get('/api/routes', async (req, res) => {
+    try {
+        const routes = await Route.find({ isActive: true });
+        res.json({ routes });
+    } catch (error) {
+        console.error('Error getting routes:', error);
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // API endpoint để lấy route hiện tại của xe
@@ -349,6 +395,41 @@ app.delete('/api/orders/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Cập nhật trạng thái đơn hàng
+app.patch('/api/orders/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, reason } = req.body;
+
+    console.log(`📦 Updating order ${id} status to: ${status}`);
+
+    const order = await Order.findOne({ id: parseInt(id) });
+    if (!order) {
+      console.error(`❌ Order ${id} not found`);
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Update status using the model method if available, otherwise directly
+    if (typeof order.updateStatus === 'function') {
+      order.updateStatus(status);
+    } else {
+      order.status = status;
+      order.updatedAt = new Date();
+    }
+    
+    if (status === 'cancelled' && reason) {
+      order.cancelReason = reason;
+    }
+    
+    await order.save();
+    console.log(`✅ Order ${id} status updated to: ${status}`);
+    res.json(order);
+  } catch (err) {
+    console.error('Error updating order status:', err);
+    res.status(400).json({ error: err.message });
   }
 });
 
