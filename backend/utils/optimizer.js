@@ -1,78 +1,6 @@
 // Port từ OptimizeController.cs
 const axios = require('axios');
 const Route = require('../models/Route');
-<<<<<<< HEAD
-const { spawn } = require('child_process');
-
-// Douglas-Peucker algorithm để giảm số điểm trong polyline
-function simplifyPolyline(points, tolerance = 0.0001) {
-    if (!points || points.length <= 2) return points;
-    
-    // Find point with maximum distance from line between first and last
-    let maxDist = 0;
-    let maxIndex = 0;
-    const firstPoint = points[0];
-    const lastPoint = points[points.length - 1];
-    
-    for (let i = 1; i < points.length - 1; i++) {
-        const dist = perpendicularDistance(points[i], firstPoint, lastPoint);
-        if (dist > maxDist) {
-            maxDist = dist;
-            maxIndex = i;
-        }
-    }
-    
-    // If max distance is greater than tolerance, recursively simplify
-    if (maxDist > tolerance) {
-        const leftSegment = simplifyPolyline(points.slice(0, maxIndex + 1), tolerance);
-        const rightSegment = simplifyPolyline(points.slice(maxIndex), tolerance);
-        
-        // Combine segments (remove duplicate middle point)
-        return leftSegment.slice(0, -1).concat(rightSegment);
-    } else {
-        // Return only first and last points
-        return [firstPoint, lastPoint];
-    }
-}
-
-// Calculate perpendicular distance from point to line
-function perpendicularDistance(point, lineStart, lineEnd) {
-    const [px, py] = point;
-    const [x1, y1] = lineStart;
-    const [x2, y2] = lineEnd;
-    
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    
-    // Handle case where line is actually a point
-    if (dx === 0 && dy === 0) {
-        return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
-    }
-    
-    const numerator = Math.abs(dy * px - dx * py + x2 * y1 - y2 * x1);
-    const denominator = Math.sqrt(dx ** 2 + dy ** 2);
-    
-    return numerator / denominator;
-}
-
-// Simple in-memory cache for OSRM responses to avoid repeated remote calls during recalculations.
-// Keyed by the coordinates string. TTL and max size to prevent unbounded memory growth.
-const osrmCache = new Map(); // key -> { ts, value }
-const OSRM_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const OSRM_CACHE_MAX = 500; // max entries
-
-function pruneOsrmCache() {
-    if (osrmCache.size <= OSRM_CACHE_MAX) return;
-    // Remove oldest entries (Map preserves insertion order)
-    const removeCount = osrmCache.size - OSRM_CACHE_MAX;
-    const it = osrmCache.keys();
-    for (let i = 0; i < removeCount; i++) {
-        const k = it.next().value;
-        osrmCache.delete(k);
-    }
-}
-=======
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
 
 // Hàm gọi OSRM để lấy đường đi thực tế giữa các điểm
 async function getOsrmRoute(points) {
@@ -89,94 +17,6 @@ async function getOsrmRoute(points) {
             return { route: points, distance: 0, duration: 0 };
         }
 
-<<<<<<< HEAD
-        // Build coordinates string for all points
-        const coordinates = points.map(p => 
-            Array.isArray(p) && p.length === 2 ? `${p[1]},${p[0]}` : null
-        ).filter(Boolean).join(';');
-
-        // Check cache first
-        const cacheKey = coordinates;
-        const cached = osrmCache.get(cacheKey);
-        if (cached && (Date.now() - cached.ts) < OSRM_CACHE_TTL) {
-            // Cache hit
-            console.log('OSRM cache hit for key (len chars):', cacheKey.length);
-            // Return a shallow clone to avoid accidental mutation
-            return { ...cached.value };
-        }
-
-        console.log('Calling OSRM with coordinates:', coordinates);
-
-        try {
-            const url = `http://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&steps=true`;
-            const response = await axios.get(url);
-            
-            if (response.data.code === 'Ok' && response.data.routes[0]) {
-                const route = response.data.routes[0];
-                // Chuyển đổi tất cả các điểm từ [lng, lat] sang [lat, lng]
-                const routePoints = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
-                
-                // Simplify polyline để giảm số điểm (tăng tốc render)
-                // tolerance 0.0001 ≈ 11 meters, giữ độ chính xác cao nhưng giảm ~70-80% điểm
-                const originalCount = routePoints.length;
-                let simplifiedPoints = routePoints;
-                
-                // Only simplify if we have enough points (> 50) to avoid losing short routes
-                if (originalCount > 50) {
-                    simplifiedPoints = simplifyPolyline(routePoints, 0.0001);
-                    console.log(`📉 Simplified polyline: ${originalCount} → ${simplifiedPoints.length} points (${Math.round((1 - simplifiedPoints.length/originalCount) * 100)}% reduction)`);
-                } else {
-                    console.log(`⏭️ Skipping simplification for short route (${originalCount} points)`);
-                }
-                
-                const result = {
-                    route: simplifiedPoints,
-                    distance: route.distance / 1000, // Convert to km
-                    duration: route.duration / 60 // Convert to minutes
-                };
-
-                // Store in cache
-                try {
-                    osrmCache.set(cacheKey, { ts: Date.now(), value: result });
-                    pruneOsrmCache();
-                } catch (e) {
-                    // If cache fail, ignore - not critical
-                    console.warn('OSRM cache set failed:', e && e.message);
-                }
-
-                return result;
-            } else {
-                throw new Error('OSRM response not valid');
-            }
-        } catch (error) {
-            console.error('Error calling OSRM:', error);
-            // Fallback: calculate direct distances between points
-            let fullPath = [];
-            let totalDistance = 0;
-            let totalDuration = 0;
-
-            for (let i = 0; i < points.length - 1; i++) {
-                const start = points[i];
-                const end = points[i + 1];
-                fullPath.push(start);
-                const distance = haversineDistance(start, end);
-                totalDistance += distance;
-                totalDuration += (distance / 30) * 60; // Assume 30 km/h
-            }
-            fullPath.push(points[points.length - 1]); // Add final point
-
-            return {
-                route: fullPath,
-                distance: totalDistance,
-                duration: totalDuration
-            };
-        }
-    } catch (error) {
-        console.error('Error in getOsrmRoute:', error);
-        // Final fallback: return straight lines
-        const distance = calculateDistance(points);
-        const duration = (distance / 30) * 60; // 30 km/h
-=======
         const coordinates = points.map(p => {
             if (!Array.isArray(p) || p.length !== 2) {
                 throw new Error(`Invalid coordinates: ${JSON.stringify(p)}`);
@@ -204,7 +44,6 @@ async function getOsrmRoute(points) {
         // Fallback: calculate straight-line distance
         const distance = calculateDistance(points);
         const duration = (distance / 30) * 60; // Assume 30 km/h average speed
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
         return {
             route: points,
             distance,
@@ -704,63 +543,6 @@ function buildCompleteRoute(vehicle, vehicleOrders, routeDetails) {
         console.error('Invalid vehicle data:', vehicle);
         return [];
     }
-<<<<<<< HEAD
-    if (!Array.isArray(vehicleOrders) || vehicleOrders.length === 0) {
-        return [vehicle.position, vehicle.position];
-    }
-
-    // Gom tất cả pickup và delivery
-    const pickups = vehicleOrders.map(order => ({
-        type: 'pickup',
-        orderId: order.id,
-        point: order.pickup,
-        weight: order.weight
-    }));
-    const deliveries = vehicleOrders.map(order => ({
-        type: 'delivery',
-        orderId: order.id,
-        point: order.delivery,
-        weight: order.weight
-    }));
-
-    // Sắp xếp greedy: nhận liên tiếp cho đến khi đầy tải, sau đó giao hết rồi lặp lại
-    let route = [vehicle.position];
-    let currentLoad = 0;
-    let picked = new Set();
-    let delivered = new Set();
-    let remainingPickups = [...pickups];
-    let remainingDeliveries = [...deliveries];
-
-    while (picked.size < pickups.length || delivered.size < deliveries.length) {
-        // Ưu tiên nhận hàng nếu còn tải
-        let pickedThisRound = false;
-        for (let i = 0; i < remainingPickups.length; i++) {
-            const p = remainingPickups[i];
-            if (currentLoad + p.weight <= vehicle.maxLoad) {
-                route.push(p.point);
-                currentLoad += p.weight;
-                picked.add(p.orderId);
-                remainingPickups.splice(i, 1);
-                pickedThisRound = true;
-                break;
-            }
-        }
-        if (pickedThisRound) continue;
-        // Nếu không nhận được nữa, đi giao đơn đã nhận
-        for (let i = 0; i < remainingDeliveries.length; i++) {
-            const d = remainingDeliveries[i];
-            if (picked.has(d.orderId) && !delivered.has(d.orderId)) {
-                route.push(d.point);
-                currentLoad -= d.weight;
-                delivered.add(d.orderId);
-                remainingDeliveries.splice(i, 1);
-                break;
-            }
-        }
-    }
-    // Quay về depot
-    route.push(vehicle.position);
-=======
 
     let route = [];
 
@@ -784,7 +566,6 @@ function buildCompleteRoute(vehicle, vehicleOrders, routeDetails) {
     // Thêm điểm quay về depot vào cuối route
     route.push(vehicle.position);
 
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
     return route;
 }
 
@@ -873,50 +654,8 @@ async function getCurrentRoute(vehicleId) {
     }
 }
 
-<<<<<<< HEAD
-// Hàm tối ưu hóa sử dụng Google OR-Tools (Python)
-async function assignOrdersOrtools(vehicles, orders) {
-    return new Promise((resolve, reject) => {
-        const py = spawn(
-            'f:/Dự án/QLDXGH/.venv/Scripts/python.exe',
-            [require('path').join(__dirname, 'orToolsOptimizer.py')],
-            { stdio: ['pipe', 'pipe', 'pipe'] }
-        );
-        let data = '';
-        let error = '';
-        py.stdout.on('data', chunk => { data += chunk.toString(); });
-        py.stderr.on('data', chunk => { error += chunk.toString(); });
-        py.on('close', code => {
-            let result = null;
-            try {
-                result = JSON.parse(data);
-            } catch (e) {
-                if (error) console.error('OR-Tools stderr:', error);
-                return reject(new Error('OR-Tools output is not valid JSON.\n' + error + '\n' + data));
-            }
-            if (code !== 0) {
-                if (error) console.error('OR-Tools stderr:', error);
-                return reject(new Error('OR-Tools process exited with code ' + code + '\n' + error));
-            }
-            if (result && result.error) {
-                if (error) console.error('OR-Tools stderr:', error);
-                return reject(new Error('OR-Tools error: ' + result.error));
-            }
-            if (error) console.warn('OR-Tools log:', error); // chỉ log cảnh báo
-            resolve(result);
-        });
-        py.stdin.write(JSON.stringify({ vehicles, orders }));
-        py.stdin.end();
-    });
-}
-
 module.exports = {
     assignOrders,
-    assignOrdersOrtools, // <-- Thêm export hàm mới
-=======
-module.exports = {
-    assignOrders,
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
     getOsrmRoute,
     buildRoute: buildCompleteRoute,
     generateRouteDetails,

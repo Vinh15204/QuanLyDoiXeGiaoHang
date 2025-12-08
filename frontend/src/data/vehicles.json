@@ -1,23 +1,7 @@
 [
-<<<<<<< HEAD
-  {"id":1,"position":[21.0019,105.8000],"maxLoad":120},
-  {"id":2,"position":[20.9578,105.8245],"maxLoad":100},
-  {"id":3,"position":[21.0452,105.7598],"maxLoad":150},
-  {"id":4,"position":[20.9756,105.8532],"maxLoad":100},
-  {"id":5,"position":[21.0278,105.7789],"maxLoad":100},
-  {"id":6,"position":[20.9623,105.7654],"maxLoad":120},
-  {"id":7,"position":[21.0123,105.8397],"maxLoad":100},
-  {"id":8,"position":[20.9871,105.7612],"maxLoad":130},
-  {"id":9,"position":[21.0389,105.8221],"maxLoad":110},
-  {"id":10,"position":[20.9704,105.7998],"maxLoad":100},
-  {"id":11,"position":[21.0496,105.8145],"maxLoad":140},
-  {"id":12,"position":[20.9943,105.7456],"maxLoad":100}
-]
-=======
   {"id":1,"position":[21.0285,105.8442],"maxLoad":120},
   {"id":2,"position":[21.0315,105.8502],"maxLoad":100},
   {"id":3,"position":[21.0255,105.8512],"maxLoad":150},
   {"id":4,"position":[21.0295,105.8492],"maxLoad":100},
   {"id":5,"position":[21.0275,105.8562],"maxLoad":100}
 ]
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980

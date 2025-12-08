@@ -15,13 +15,6 @@ const VehicleSchema = new mongoose.Schema({
             message: 'Position must be [latitude, longitude]'
         }
     },
-<<<<<<< HEAD
-    currentAddress: {
-        type: String,
-        default: ''
-    },
-=======
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
     maxLoad: { 
         type: Number,
         required: true,

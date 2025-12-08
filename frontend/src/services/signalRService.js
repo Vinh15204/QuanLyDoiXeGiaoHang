@@ -4,25 +4,6 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 class SignalRService {
     constructor() {
-<<<<<<< HEAD
-        this._connectHandlers = [];
-        this._disconnectHandlers = [];
-        this._routeUpdateHandlers = [];
-
-        this.socket = io(API_BASE_URL, {
-            transports: ['websocket'],
-            autoConnect: true,
-            reconnection: true,
-            reconnectionDelay: 1000,
-            reconnectionDelayMax: 5000,
-            reconnectionAttempts: Infinity
-        });
-
-        this.socket.on('connect', () => {
-            console.log('Socket.IO Connected successfully');
-            this._retryCount = 0;
-            this._connectHandlers.forEach(handler => handler());
-=======
         this.socket = io(API_BASE_URL, {
             transports: ['websocket'],
             autoConnect: true,
@@ -35,7 +16,6 @@ class SignalRService {
         this.socket.on('connect', () => {
             console.log('Socket.IO Connected successfully');
             this._retryCount = 0; // Reset retry count on successful connection
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
         });
 
         this.socket.on('connect_error', (error) => {
@@ -46,89 +26,6 @@ class SignalRService {
 
         this.socket.on('disconnect', (reason) => {
             console.log('Socket.IO Disconnected:', reason);
-<<<<<<< HEAD
-            this._disconnectHandlers.forEach(handler => handler());
-            if (reason === 'io server disconnect') {
-                this.socket.connect();
-            }
-        });
-
-        this.socket.on('routeUpdate', (routeData) => {
-            console.log('Received route update:', routeData);
-            this._routeUpdateHandlers.forEach(handler => handler(routeData));
-        });
-    }
-
-    // Event handler registration methods
-    onConnect(handler) {
-        this._connectHandlers.push(handler);
-        // Nếu đã kết nối, gọi handler ngay lập tức
-        if (this.socket.connected) {
-            handler();
-        }
-    }
-
-    onDisconnect(handler) {
-        this._disconnectHandlers.push(handler);
-    }
-
-    onRouteUpdate(handler) {
-        this._routeUpdateHandlers.push(handler);
-    }
-
-    // Event handler removal methods
-    offConnect(handler) {
-        this._connectHandlers = this._connectHandlers.filter(h => h !== handler);
-    }
-
-    offDisconnect(handler) {
-        this._disconnectHandlers = this._disconnectHandlers.filter(h => h !== handler);
-    }
-
-    offRouteUpdate(handler) {
-        this._routeUpdateHandlers = this._routeUpdateHandlers.filter(h => h !== handler);
-    }
-
-    // Connection management methods
-    connect() {
-        if (!this.socket.connected) {
-            console.log('Initiating socket connection...');
-            this.socket.connect();
-        }
-    }
-
-    disconnect() {
-        if (this.socket.connected) {
-            console.log('Disconnecting socket...');
-            this.socket.disconnect();
-        }
-    }
-
-    isConnected() {
-        return this.socket.connected;
-    }
-
-    // Đăng ký user với server để nhận cập nhật đơn hàng
-    registerUser(userId) {
-        if (this.socket && this.socket.connected) {
-            this.socket.emit('registerUser', userId);
-            console.log('registerUser emitted:', userId);
-        } else {
-            // Nếu socket chưa kết nối, đợi kết nối xong rồi emit
-            this.onConnect(() => {
-                this.socket.emit('registerUser', userId);
-                console.log('registerUser emitted (delayed):', userId);
-            });
-        }
-    }
-
-    // Clean up method
-    cleanup() {
-        this._connectHandlers = [];
-        this._disconnectHandlers = [];
-        this._routeUpdateHandlers = [];
-        this.disconnect();
-=======
             if (reason === 'io server disconnect') {
                 // Server initiated disconnect, try to reconnect
                 this.socket.connect();
@@ -151,6 +48,28 @@ class SignalRService {
 
     isConnected() {
         return this.socket.connected;
+    }
+
+    // Event listener methods for DriverPage
+    onConnect(callback) {
+        this.socket.on('connect', callback);
+    }
+
+    onDisconnect(callback) {
+        this.socket.on('disconnect', callback);
+    }
+
+    onRouteUpdate(callback) {
+        this.socket.on('routeUpdate', callback);
+    }
+
+    // Cleanup method to remove all listeners
+    cleanup() {
+        this.socket.off('connect');
+        this.socket.off('disconnect');
+        this.socket.off('routeUpdate');
+        this.socket.off('orderUpdates');
+        this.socket.off('userOrderUpdate');
     }
 
     // Event registration methods
@@ -218,7 +137,6 @@ class SignalRService {
         if (this.socket) {
             this.socket.disconnect();
         }
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
     }
 }
 

@@ -19,30 +19,6 @@ class DeliveryHub {
             // Driver đăng ký nhận updates
             socket.on('registerDriver', async (driverId) => {
                 try {
-<<<<<<< HEAD
-                    const driverIdStr = driverId.toString();
-                    this.driverConnections.set(driverIdStr, socket.id);
-                    console.log(`Driver ${driverId} registered with socket ${socket.id}`);
-
-                    // Gửi route hiện tại cho driver nếu có
-                    try {
-                        const route = await Route.findOne({ 
-                            vehicleId: driverId,
-                            status: 'active'
-                        });
-
-                        if (route) {
-                            console.log(`Sending current route to driver ${driverId}`);
-                            socket.emit('routeUpdate', {
-                                type: 'routeUpdate',
-                                data: route
-                            });
-                        } else {
-                            console.log(`No active route found for driver ${driverId}`);
-                        }
-                    } catch (err) {
-                        console.error(`Error fetching route for driver ${driverId}:`, err);
-=======
                     this.driverConnections.set(driverId, socket.id);
                     console.log(`Driver ${driverId} registered`);
 
@@ -56,7 +32,6 @@ class DeliveryHub {
                         });
                     } else {
                         console.log(`No active route found for driver ${driverId}`);
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
                     }
                 } catch (err) {
                     console.error(`Error handling driver registration for ${driverId}:`, err);
@@ -122,27 +97,6 @@ class DeliveryHub {
     // Gửi cập nhật route cho driver
     async sendRouteUpdateToDriver(driverId, route) {
         try {
-<<<<<<< HEAD
-            const socketId = this.driverConnections.get(driverId.toString());
-            if (socketId) {
-                console.log(`Sending route update to driver ${driverId} via socket ${socketId}`);
-                this.io.to(socketId).emit('routeUpdate', {
-                    type: 'routeUpdate',
-                    data: route
-                });
-                return true;
-            } else {
-                console.log(`Driver ${driverId} not connected, broadcasting to all sockets...`);
-                this.io.emit('routeUpdate', {
-                    type: 'routeUpdate',
-                    data: route
-                });
-                return true;
-            }
-        } catch (err) {
-            console.error(`Error sending route update to driver ${driverId}:`, err);
-            return false;
-=======
             const socketId = this.driverConnections.get(driverId);
             if (socketId) {
                 console.log(`Sending route update to driver ${driverId}`);
@@ -155,7 +109,6 @@ class DeliveryHub {
             }
         } catch (err) {
             console.error(`Error sending route update to driver ${driverId}:`, err);
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
         }
     }
 

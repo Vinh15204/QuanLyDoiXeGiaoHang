@@ -9,7 +9,13 @@ import {
 import Login from "./components/Login";
 import UserPage from "./components/UserPage";
 import DriverPage from "./components/DriverPage";
-import AdminDashboard from "./components/AdminDashboard";
+import ModernDashboardContent from "./components/ModernDashboardContent";
+import DashboardLayout from "./components/DashboardLayout";
+import VehiclesManagementNew from "./components/VehiclesManagementNew";
+import OrdersManagementNew from "./components/OrdersManagementNew";
+import DriversManagement from "./components/DriversManagement";
+import Analytics from "./components/Analytics";
+import Settings from "./components/Settings";
 import { RouteProvider } from "./contexts/RouteContext";
 import "./styles/globals.css";
 import "./App.css";
@@ -29,15 +35,14 @@ function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         
-        {/* Admin routes - NO RouteProvider */}
-        <Route path="/admin">
-          <Route path="map" element={<AdminDashboard />} />
-          <Route path="info" element={<AdminDashboard />} />
-          <Route path="vehicles" element={<AdminDashboard />} />
-          <Route path="orders" element={<AdminDashboard />} />
-          <Route path="drivers" element={<AdminDashboard />} />
-          <Route path="analytics" element={<AdminDashboard />} />
-          <Route path="settings" element={<AdminDashboard />} />
+        {/* Admin routes - with DashboardLayout wrapper */}
+        <Route path="/admin" element={<DashboardLayout />}>
+          <Route path="map" element={<ModernDashboardContent />} />
+          <Route path="vehicles" element={<VehiclesManagementNew />} />
+          <Route path="orders" element={<OrdersManagementNew />} />
+          <Route path="drivers" element={<DriversManagement />} />
+          <Route path="analytics" element={<Analytics />} />
+          <Route path="settings" element={<Settings />} />
           <Route index element={<Navigate to="map" replace />} />
         </Route>
         

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import '../styles/ModernDashboard.css';
 
-function DashboardLayout({ children }) {
+function DashboardLayout() {
     const navigate = useNavigate();
     const location = useLocation();
     const [currentUser] = useState(() => {
@@ -102,7 +102,7 @@ function DashboardLayout({ children }) {
 
                 {/* Dynamic Content */}
                 <div className="page-content">
-                    {children}
+                    <Outlet />
                 </div>
             </div>
         </div>

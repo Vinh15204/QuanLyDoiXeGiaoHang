@@ -1,45 +1,13 @@
 [
-<<<<<<< HEAD
- 
-=======
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
   {"id":1,"name":"Nguyễn Văn A","username":"nguyenvana","password":"123456","currentLocation":[21.0285,105.8542],"role":"user"},
   {"id":2,"name":"Trần Thị B","username":"tranthib","password":"123456","currentLocation":[21.0315,105.8502],"role":"user"},
   {"id":3,"name":"Phạm Thị C","username":"phamthic","password":"123456","currentLocation":[21.0295,105.8612],"role":"user"},
   {"id":4,"name":"Hoàng Văn D","username":"hoangvand","password":"123456","currentLocation":[21.0265,105.8478],"role":"user"},
   {"id":5,"name":"Lê Thị E","username":"lethie","password":"123456","currentLocation":[21.0312,105.8534],"role":"user"},
-<<<<<<< HEAD
-  {"id":6,"name":"Nguyễn Văn F","username":"nguyenvanf","password":"123456","currentLocation":[21.0321,105.8601],"role":"user"},
-  {"id":7,"name":"Trần Văn G","username":"tranvang","password":"123456","currentLocation":[21.0254,105.8495],"role":"user"},
-  {"id":8,"name":"Phạm Thị H","username":"phamthih","password":"123456","currentLocation":[21.0302,105.8567],"role":"user"},
-  {"id":9,"name":"Hoàng Thị I","username":"hoangthii","password":"123456","currentLocation":[21.0278,105.8513],"role":"user"},
-  {"id":10,"name":"Lê Văn K","username":"levank","password":"123456","currentLocation":[21.0291,105.8589],"role":"user"},
-  {"id":11,"name":"Nguyễn Thị L","username":"nguyenthil","password":"123456","currentLocation":[21.0267,105.8465],"role":"user"},
-  {"id":12,"name":"Trần Văn M","username":"tranvanm","password":"123456","currentLocation":[21.0334,105.8521],"role":"user"},
-  {"id":13,"name":"Phạm Văn N","username":"phamvann","password":"123456","currentLocation":[21.0245,105.8556],"role":"user"},
-  {"id":14,"name":"Hoàng Thị O","username":"hoangthio","password":"123456","currentLocation":[21.0308,105.8487],"role":"user"},
-  {"id":15,"name":"Lê Thị P","username":"lethip","password":"123456","currentLocation":[21.0282,105.8604],"role":"user"},
-  {"id":16,"name":"Nguyễn Văn Q","username":"nguyenvanq","password":"123456","currentLocation":[21.0261,105.8532],"role":"user"},
-  {"id":17,"name":"Trần Thị R","username":"tranthir","password":"123456","currentLocation":[21.0317,105.8498],"role":"user"},
-  {"id":18,"name":"Phạm Văn S","username":"phamvans","password":"123456","currentLocation":[21.0274,105.8576],"role":"user"},
-  {"id":19,"name":"Hoàng Văn T","username":"hoangvant","password":"123456","currentLocation":[21.0298,105.8462],"role":"user"},
-  {"id":20,"name":"Lê Thị U","username":"lethiu","password":"123456","currentLocation":[21.0323,105.8519],"role":"user"},
-=======
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
   {"id":1,"name":"Lê Văn X","username":"levanx","password":"123456","vehicleId":1,"currentLocation":[21.0285,105.8542],"role":"driver"},
   {"id":2,"name":"Trần Văn Y","username":"tranvany","password":"123456","vehicleId":2,"currentLocation":[21.0315,105.8502],"role":"driver"},
   {"id":3,"name":"Phạm Văn Z","username":"phamvanz","password":"123456","vehicleId":3,"currentLocation":[21.0255,105.8582],"role":"driver"},
   {"id":4,"name":"Nguyễn Văn M","username":"nguyenvanm","password":"123456","vehicleId":4,"currentLocation":[21.0295,105.8492],"role":"driver"},
   {"id":5,"name":"Hoàng Văn N","username":"hoangvann","password":"123456","vehicleId":5,"currentLocation":[21.0275,105.8562],"role":"driver"},
-<<<<<<< HEAD
-  {"id":6,"name":"Nguyễn Văn O","username":"nguyenvano","password":"123456","vehicleId":6,"currentLocation":[21.0301,105.8523],"role":"driver"},
-  {"id":7,"name":"Trần Văn P","username":"tranvanp","password":"123456","vehicleId":7,"currentLocation":[21.0268,105.8479],"role":"driver"},
-  {"id":8,"name":"Phạm Văn Q","username":"phamvanq","password":"123456","vehicleId":8,"currentLocation":[21.0324,105.8551],"role":"driver"},
-  {"id":9,"name":"Hoàng Văn R","username":"hoangvanr","password":"123456","vehicleId":9,"currentLocation":[21.0287,105.8593],"role":"driver"},
-  {"id":10,"name":"Lê Văn S","username":"levans","password":"123456","vehicleId":10,"currentLocation":[21.0259,105.8517],"role":"driver"},
-  {"id":11,"name":"Nguyễn Văn T","username":"nguyenvant","password":"123456","vehicleId":11,"currentLocation":[21.0312,105.8485],"role":"driver"},
-  {"id":12,"name":"Trần Văn U","username":"tranvanu","password":"123456","vehicleId":12,"currentLocation":[21.0293,105.8568],"role":"driver"},
-=======
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
   {"id":1,"name":"Admin","username":"admin","password":"admin123","role":"admin"}
 ]

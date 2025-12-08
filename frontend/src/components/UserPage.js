@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-<<<<<<< HEAD
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMapEvents } from 'react-leaflet';
 import signalRService from '../services/signalRService';
 import ordersData from '../data/orders.json';
@@ -9,12 +8,6 @@ import { useRoute } from '../contexts/RouteContext';
 import Modal from './Modal';
 import "leaflet/dist/leaflet.css";
 import '../utils/mapIcons';
-=======
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
-import signalRService from '../services/signalRService';
-import "leaflet/dist/leaflet.css";
-import '../utils/mapIcons';  // Import map icons
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
 import Header from './Header';
 import '../styles/User.css';
 import '../styles/ModernDashboard.css';
@@ -24,7 +17,7 @@ const HANOI_CENTER = [21.0285, 105.8542];
 function LocationPickerModal({ isOpen, onClose, onPick, label }) {
   const [picked, setPicked] = useState(null);
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Chọn ${label} trên bản đồ`}>
+    <Modal isOpen={isOpen} onClose={onClose} title={`Chß╗ìn ${label} tr├¬n bß║ún ─æß╗ô`}>
       <div style={{ width: 400, height: 350, marginBottom: 12 }}>
         <MapContainer center={HANOI_CENTER} zoom={13} style={{ width: '100%', height: '100%' }}>
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -35,7 +28,7 @@ function LocationPickerModal({ isOpen, onClose, onPick, label }) {
           />
         </MapContainer>
       </div>
-      <button onClick={() => { if (picked) { onPick(picked); onClose(); } }} disabled={!picked} style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '10px 0', fontWeight: 600, fontSize: 16, cursor: picked ? 'pointer' : 'not-allowed', width: '100%' }}>Xác nhận</button>
+      <button onClick={() => { if (picked) { onPick(picked); onClose(); } }} disabled={!picked} style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '10px 0', fontWeight: 600, fontSize: 16, cursor: picked ? 'pointer' : 'not-allowed', width: '100%' }}>X├íc nhß║¡n</button>
     </Modal>
   );
 }
@@ -46,7 +39,7 @@ function LocationPicker({ onPick, markerPosition, label }) {
       onPick([e.latlng.lat, e.latlng.lng]);
     }
   });
-  // Chỉ render Marker nếu markerPosition là mảng hợp lệ
+  // Chß╗ë render Marker nß║┐u markerPosition l├á mß║úng hß╗úp lß╗ç
   if (Array.isArray(markerPosition) && markerPosition.length === 2 && markerPosition.every(x => typeof x === 'number' && !isNaN(x))) {
     return (
       <Marker position={markerPosition}>
@@ -57,13 +50,10 @@ function LocationPicker({ onPick, markerPosition, label }) {
   return null;
 }
 
-const HANOI_CENTER = [21.0285, 105.8542];
-
 function UserPage() {
   const navigate = useNavigate();
-  const [orderUpdate, setOrderUpdate] = useState(null);
+  const [userOrders, setUserOrders] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
-<<<<<<< HEAD
   const [shouldRedirect, setShouldRedirect] = useState(false);
   const { optimizedRoutes } = useRoute();
   const [showModal, setShowModal] = useState(false);
@@ -72,10 +62,8 @@ function UserPage() {
   const [pickMode, setPickMode] = useState(null); // 'pickup' | 'delivery' | null
   const [showPickModal, setShowPickModal] = useState(false);
   const [pickLabel, setPickLabel] = useState('');
-=======
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
 
-  // Chỉ kiểm tra đăng nhập khi mount, không phụ thuộc navigate
+  // Chß╗ë kiß╗âm tra ─æ─âng nhß║¡p khi mount, kh├┤ng phß╗Ñ thuß╗Öc navigate
   useEffect(() => {
     const userStr = localStorage.getItem('currentUser');
     if (!userStr || JSON.parse(userStr).role !== 'user') {
@@ -85,49 +73,37 @@ function UserPage() {
     const user = JSON.parse(userStr);
     setCurrentUser(user);
 
-<<<<<<< HEAD
-    // Ưu tiên lấy đơn hàng từ localStorage
+    // ╞»u ti├¬n lß║Ñy ─æ╞ín h├áng tß╗½ localStorage
     const savedOrders = localStorage.getItem(`userOrders_${user.id}`);
     let myOrders;
     if (savedOrders) {
       myOrders = JSON.parse(savedOrders);
     } else {
-      // Lọc đơn hàng của user hiện tại từ file tĩnh
+      // Lß╗ìc ─æ╞ín h├áng cß╗ºa user hiß╗çn tß║íi tß╗½ file t─⌐nh
       myOrders = ordersData.filter(order => 
         order.senderId === user.id || order.receiverId === user.id
       );
     }
     setUserOrders(myOrders);
 
-    // Đăng ký nhận cập nhật đơn hàng qua signalR nếu cần
+    // ─É─âng k├╜ nhß║¡n cß║¡p nhß║¡t ─æ╞ín h├áng qua signalR nß║┐u cß║ºn
     signalRService.registerUser(user.id);
-    // TODO: Nếu muốn cập nhật realtime, cần lắng nghe sự kiện và cập nhật userOrders
+    // TODO: Nß║┐u muß╗æn cß║¡p nhß║¡t realtime, cß║ºn lß║»ng nghe sß╗▒ kiß╗çn v├á cß║¡p nhß║¡t userOrders
 
     // Cleanup
     return () => {
-      // signalRService.unregisterUser(user.id); // Nếu có hàm này
-=======
-    // Đăng ký nhận cập nhật đơn hàng
-    signalRService.registerUser(user.id, (update) => {
-      console.log("Nhận được cập nhật đơn hàng:", update);
-      setOrderUpdate(update);
-    });
-
-    return () => {
-      // Hủy đăng ký khi component unmount
-      signalRService.unregisterUser(user.id);
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
+      // signalRService.unregisterUser(user.id); // Nß║┐u c├│ h├ám n├áy
     };
   }, []);
 
-  // Lưu userOrders vào localStorage mỗi khi thay đổi
+  // L╞░u userOrders v├áo localStorage mß╗ùi khi thay ─æß╗òi
   useEffect(() => {
     if (currentUser && userOrders.length > 0) {
       localStorage.setItem(`userOrders_${currentUser.id}`, JSON.stringify(userOrders));
     }
   }, [userOrders, currentUser]);
 
-  // Chỉ navigate khi shouldRedirect đổi sang true
+  // Chß╗ë navigate khi shouldRedirect ─æß╗òi sang true
   useEffect(() => {
     if (shouldRedirect) {
       navigate('/login', { replace: true });
@@ -152,8 +128,8 @@ function UserPage() {
               <Marker position={order.pickup}>
                 <Popup>
                   <div>
-                    <h4>Điểm nhận hàng</h4>
-                    <p>Đơn hàng #{order.id}</p>
+                    <h4>─Éiß╗âm nhß║¡n h├áng</h4>
+                    <p>─É╞ín h├áng #{order.id}</p>
                   </div>
                 </Popup>
               </Marker>
@@ -162,8 +138,8 @@ function UserPage() {
               <Marker position={order.delivery}>
                 <Popup>
                   <div>
-                    <h4>Điểm giao hàng</h4>
-                    <p>Đơn hàng #{order.id}</p>
+                    <h4>─Éiß╗âm giao h├áng</h4>
+                    <p>─É╞ín h├áng #{order.id}</p>
                   </div>
                 </Popup>
               </Marker>
@@ -173,7 +149,7 @@ function UserPage() {
             )}
           </React.Fragment>
         ))}
-        {/* Hiển thị marker chọn điểm nhận/giao khi tạo đơn mới */}
+        {/* Hiß╗ân thß╗ï marker chß╗ìn ─æiß╗âm nhß║¡n/giao khi tß║ío ─æ╞ín mß╗¢i */}
         {showModal && pickMode === 'pickup' && (
           <LocationPicker
             onPick={latlng => {
@@ -181,7 +157,7 @@ function UserPage() {
               setPickMode(null);
             }}
             markerPosition={newOrder.pickup ? newOrder.pickup.split(',').map(Number) : null}
-            label="Điểm nhận mới"
+            label="─Éiß╗âm nhß║¡n mß╗¢i"
           />
         )}
         {showModal && pickMode === 'delivery' && (
@@ -191,25 +167,25 @@ function UserPage() {
               setPickMode(null);
             }}
             markerPosition={newOrder.delivery ? newOrder.delivery.split(',').map(Number) : null}
-            label="Điểm giao mới"
+            label="─Éiß╗âm giao mß╗¢i"
           />
         )}
       </MapContainer>
     );
   };
 
-  // Hàm lấy thông tin lộ trình cho đơn hàng
+  // H├ám lß║Ñy th├┤ng tin lß╗Ö tr├¼nh cho ─æ╞ín h├áng
   const getOrderRouteInfo = (orderId) => {
     if (!optimizedRoutes) return null;
     for (const route of optimizedRoutes) {
       if (route.assignedOrders && route.assignedOrders.includes(orderId)) {
-        // Tìm stop pickup/delivery của đơn hàng này
+        // T├¼m stop pickup/delivery cß╗ºa ─æ╞ín h├áng n├áy
         const pickupStop = route.stops?.find(s => s.orderId == orderId && s.type === 'pickup');
         const deliveryStop = route.stops?.find(s => s.orderId == orderId && s.type === 'delivery');
-        // Tìm tài xế
+        // T├¼m t├ái xß║┐
         const driver = usersFlat.find(u => u.role === 'driver' && u.vehicleId === route.vehicleId);
         return {
-          driverName: driver ? driver.name : 'Chưa rõ',
+          driverName: driver ? driver.name : 'Ch╞░a r├╡',
           pickupTime: pickupStop?.arrivalTime,
           deliveryTime: deliveryStop?.arrivalTime,
         };
@@ -218,13 +194,13 @@ function UserPage() {
     return null;
   };
 
-  // Hàm xử lý tạo đơn hàng mới
+  // H├ám xß╗¡ l├╜ tß║ío ─æ╞ín h├áng mß╗¢i
   const handleCreateOrder = async () => {
     setCreating(true);
     try {
       const pickupArr = newOrder.pickup.split(',').map(Number);
       const deliveryArr = newOrder.delivery.split(',').map(Number);
-      // Lấy id mới bắt đầu từ 100 (tìm max id hiện tại hoặc lấy 100 nếu chưa có)
+      // Lß║Ñy id mß╗¢i bß║»t ─æß║ºu tß╗½ 100 (t├¼m max id hiß╗çn tß║íi hoß║╖c lß║Ñy 100 nß║┐u ch╞░a c├│)
       const getNewOrderId = () => {
         const maxId = userOrders.length > 0 ? Math.max(...userOrders.map(o => o.id || 0)) : 99;
         return maxId >= 100 ? maxId + 1 : 100;
@@ -239,7 +215,7 @@ function UserPage() {
         status: 'pending',
         driverId: null
       };
-      // Gửi lên backend
+      // Gß╗¡i l├¬n backend
       const res = await fetch('http://localhost:3001/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -248,32 +224,31 @@ function UserPage() {
       if (res.ok) {
         const created = await res.json();
         setUserOrders(prev => [...prev, created]);
-        alert(`Tạo đơn hàng thành công! Mã đơn hàng: ${created.id}`);
+        alert(`Tß║ío ─æ╞ín h├áng th├ánh c├┤ng! M├ú ─æ╞ín h├áng: ${created.id}`);
       } else {
-        alert('Tạo đơn hàng thất bại!');
+        alert('Tß║ío ─æ╞ín h├áng thß║Ñt bß║íi!');
       }
       setShowModal(false);
       setNewOrder({ pickup: '', delivery: '', weight: '', receiverId: '' });
     } catch (e) {
-      alert('Lỗi khi tạo đơn hàng!');
+      alert('Lß╗ùi khi tß║ío ─æ╞ín h├áng!');
     } finally {
       setCreating(false);
     }
   };
 
-<<<<<<< HEAD
   return (
     <div className="modern-dashboard">
       <Header />
       <div className="dashboard-container">
         <div className="dashboard-header">
           <div className="header-left">
-            <h1 className="page-title">👤 Dashboard Khách Hàng</h1>
-            <p className="page-subtitle">Xin chào, {currentUser?.name}</p>
+            <h1 className="page-title">≡ƒæñ Dashboard Kh├ích H├áng</h1>
+            <p className="page-subtitle">Xin ch├áo, {currentUser?.name}</p>
           </div>
           <div className="header-right">
             <button className="btn-primary" onClick={() => setShowModal(true)}>
-              <span>➕</span> Tạo đơn hàng mới
+              <span>Γ₧ò</span> Tß║ío ─æ╞ín h├áng mß╗¢i
             </button>
           </div>
         </div>
@@ -282,30 +257,30 @@ function UserPage() {
           {/* Stats Cards */}
           <div className="stats-grid">
             <div className="stat-card">
-              <div className="stat-icon" style={{background: '#3498db'}}>📦</div>
+              <div className="stat-icon" style={{background: '#3498db'}}>≡ƒôª</div>
               <div className="stat-details">
-                <div className="stat-label">Tổng đơn hàng</div>
+                <div className="stat-label">Tß╗òng ─æ╞ín h├áng</div>
                 <div className="stat-value">{userOrders.length}</div>
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon" style={{background: '#f39c12'}}>⏳</div>
+              <div className="stat-icon" style={{background: '#f39c12'}}>ΓÅ│</div>
               <div className="stat-details">
-                <div className="stat-label">Đang xử lý</div>
+                <div className="stat-label">─Éang xß╗¡ l├╜</div>
                 <div className="stat-value">{userOrders.filter(o => o.status === 'pending').length}</div>
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon" style={{background: '#27ae60'}}>✅</div>
+              <div className="stat-icon" style={{background: '#27ae60'}}>Γ£à</div>
               <div className="stat-details">
-                <div className="stat-label">Hoàn thành</div>
+                <div className="stat-label">Ho├án th├ánh</div>
                 <div className="stat-value">{userOrders.filter(o => o.status === 'delivered').length}</div>
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon" style={{background: '#e74c3c'}}>⚖️</div>
+              <div className="stat-icon" style={{background: '#e74c3c'}}>ΓÜû∩╕Å</div>
               <div className="stat-details">
-                <div className="stat-label">Tổng khối lượng</div>
+                <div className="stat-label">Tß╗òng khß╗æi l╞░ß╗úng</div>
                 <div className="stat-value">{userOrders.reduce((sum, o) => sum + (o.weight || 0), 0)} kg</div>
               </div>
             </div>
@@ -315,7 +290,7 @@ function UserPage() {
             {/* Map Section */}
             <div className="content-card map-card">
               <div className="card-header">
-                <h2 className="card-title">🗺️ Bản đồ đơn hàng</h2>
+                <h2 className="card-title">≡ƒù║∩╕Å Bß║ún ─æß╗ô ─æ╞ín h├áng</h2>
               </div>
               <div className="card-body" style={{padding: 0}}>
                 {renderMap()}
@@ -325,14 +300,14 @@ function UserPage() {
             {/* Orders List Section */}
             <div className="content-card">
               <div className="card-header">
-                <h2 className="card-title">📋 Đơn hàng của tôi</h2>
+                <h2 className="card-title">≡ƒôï ─É╞ín h├áng cß╗ºa t├┤i</h2>
               </div>
               <div className="card-body">
                 {userOrders.length === 0 ? (
                   <div className="empty-state">
-                    <div className="empty-icon">📭</div>
-                    <p className="empty-text">Chưa có đơn hàng nào</p>
-                    <p className="empty-subtext">Nhấn "Tạo đơn hàng mới" để bắt đầu</p>
+                    <div className="empty-icon">≡ƒô¡</div>
+                    <p className="empty-text">Ch╞░a c├│ ─æ╞ín h├áng n├áo</p>
+                    <p className="empty-subtext">Nhß║Ñn "Tß║ío ─æ╞ín h├áng mß╗¢i" ─æß╗â bß║»t ─æß║ºu</p>
                   </div>
                 ) : (
                   <div className="orders-list">
@@ -345,17 +320,17 @@ function UserPage() {
                         cancelled: '#e74c3c'
                       };
                       const statusLabels = {
-                        pending: 'Chờ xử lý',
-                        processing: 'Đang giao',
-                        delivered: 'Đã giao',
-                        cancelled: 'Đã hủy'
+                        pending: 'Chß╗¥ xß╗¡ l├╜',
+                        processing: '─Éang giao',
+                        delivered: '─É├ú giao',
+                        cancelled: '─É├ú hß╗ºy'
                       };
                       return (
                         <div key={order.id} className="order-card">
                           <div className="order-header">
                             <div className="order-title">
-                              <span className="order-icon">📦</span>
-                              <span className="order-id">Đơn hàng #{order.id}</span>
+                              <span className="order-icon">≡ƒôª</span>
+                              <span className="order-id">─É╞ín h├áng #{order.id}</span>
                             </div>
                             <span className="status-badge" style={{
                               background: `${statusColors[order.status] || '#95a5a6'}20`,
@@ -368,18 +343,18 @@ function UserPage() {
                           
                           <div className="order-details">
                             <div className="detail-row">
-                              <span className="detail-icon">⚖️</span>
-                              <span className="detail-label">Trọng lượng:</span>
+                              <span className="detail-icon">ΓÜû∩╕Å</span>
+                              <span className="detail-label">Trß╗ìng l╞░ß╗úng:</span>
                               <span className="detail-value">{order.weight}kg</span>
                             </div>
                             <div className="detail-row">
-                              <span className="detail-icon">📍</span>
-                              <span className="detail-label">Điểm nhận:</span>
+                              <span className="detail-icon">≡ƒôì</span>
+                              <span className="detail-label">─Éiß╗âm nhß║¡n:</span>
                               <span className="detail-value">[{order.pickup[0].toFixed(4)}, {order.pickup[1].toFixed(4)}]</span>
                             </div>
                             <div className="detail-row">
-                              <span className="detail-icon">🎯</span>
-                              <span className="detail-label">Điểm giao:</span>
+                              <span className="detail-icon">≡ƒÄ»</span>
+                              <span className="detail-label">─Éiß╗âm giao:</span>
                               <span className="detail-value">[{order.delivery[0].toFixed(4)}, {order.delivery[1].toFixed(4)}]</span>
                             </div>
                             
@@ -387,22 +362,22 @@ function UserPage() {
                               <>
                                 <div className="divider"></div>
                                 <div className="detail-row">
-                                  <span className="detail-icon">🚚</span>
-                                  <span className="detail-label">Tài xế:</span>
+                                  <span className="detail-icon">≡ƒÜÜ</span>
+                                  <span className="detail-label">T├ái xß║┐:</span>
                                   <span className="detail-value">{routeInfo.driverName}</span>
                                 </div>
                                 {routeInfo.pickupTime && (
                                   <div className="detail-row">
-                                    <span className="detail-icon">⏰</span>
-                                    <span className="detail-label">Đến điểm nhận:</span>
-                                    <span className="detail-value">{routeInfo.pickupTime} phút</span>
+                                    <span className="detail-icon">ΓÅ░</span>
+                                    <span className="detail-label">─Éß║┐n ─æiß╗âm nhß║¡n:</span>
+                                    <span className="detail-value">{routeInfo.pickupTime} ph├║t</span>
                                   </div>
                                 )}
                                 {routeInfo.deliveryTime && (
                                   <div className="detail-row">
-                                    <span className="detail-icon">⏱️</span>
-                                    <span className="detail-label">Đến điểm giao:</span>
-                                    <span className="detail-value">{routeInfo.deliveryTime} phút</span>
+                                    <span className="detail-icon">ΓÅ▒∩╕Å</span>
+                                    <span className="detail-label">─Éß║┐n ─æiß╗âm giao:</span>
+                                    <span className="detail-value">{routeInfo.deliveryTime} ph├║t</span>
                                   </div>
                                 )}
                               </>
@@ -410,8 +385,8 @@ function UserPage() {
                             
                             {order.route && Array.isArray(order.route) && order.route.length > 1 && (
                               <div className="route-optimized">
-                                <span className="check-icon">✓</span>
-                                Đã tối ưu lộ trình
+                                <span className="check-icon">Γ£ô</span>
+                                ─É├ú tß╗æi ╞░u lß╗Ö tr├¼nh
                               </div>
                             )}
                           </div>
@@ -423,119 +398,22 @@ function UserPage() {
               </div>
             </div>
           </div>
-=======
-  const renderMap = () => {
-    return (
-      <MapContainer 
-        center={HANOI_CENTER} 
-        zoom={13} 
-        style={{
-          height: "500px", // Explicit height
-          width: "100%",
-          border: "1px solid #ccc",
-          borderRadius: "4px"
-        }}
-      >
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-        
-        {/* Hiển thị vị trí xe */}
-        {orderUpdate?.vehiclePosition && (
-          <Marker position={orderUpdate.vehiclePosition}>
-            <Popup>
-              <div>
-                <h4>Xe #{orderUpdate.vehicleId}</h4>
-                <p>Đang trên đường đến điểm nhận/giao hàng</p>
-              </div>
-            </Popup>
-          </Marker>
-        )}
-
-        {/* Hiển thị điểm nhận và giao */}
-        {orderUpdate?.pickup && (
-          <Marker position={orderUpdate.pickup}>
-            <Popup>
-              <div>
-                <h4>Điểm nhận hàng</h4>
-                <p>Đơn hàng #{orderUpdate.orderId}</p>
-              </div>
-            </Popup>
-          </Marker>
-        )}
-
-        {orderUpdate?.delivery && (
-          <Marker position={orderUpdate.delivery}>
-            <Popup>
-              <div>
-                <h4>Điểm giao hàng</h4>
-                <p>Đơn hàng #{orderUpdate.orderId}</p>
-              </div>
-            </Popup>
-          </Marker>
-        )}
-
-        {/* Hiển thị đường đi từ điểm nhận đến điểm giao */}
-        {orderUpdate?.pickup && orderUpdate?.delivery && (
-          <Polyline 
-            positions={[orderUpdate.pickup, orderUpdate.delivery]}
-            color="green"
-            weight={3}
-          />
-        )}
-      </MapContainer>
-    );
-  };
-
-  const renderOrderDetails = () => {
-    if (!orderUpdate) return null;
-
-    return (
-      <div className="order-details">
-        <h3>Thông tin đơn hàng #{orderUpdate.orderId}</h3>
-        <div className="stats">
-          <p><strong>Xe giao hàng:</strong> #{orderUpdate.vehicleId}</p>
-          <p><strong>Quãng đường:</strong> {orderUpdate.distance.toFixed(2)} km</p>
-          <p><strong>Thời gian ước tính:</strong> {orderUpdate.duration.toFixed(0)} phút</p>
-        </div>
-        <div className="locations">
-          <div className="pickup">
-            <h4>Điểm nhận hàng</h4>
-            <p>Vị trí: [{orderUpdate.pickup[0].toFixed(4)}, {orderUpdate.pickup[1].toFixed(4)}]</p>
-          </div>
-          <div className="delivery">
-            <h4>Điểm giao hàng</h4>
-            <p>Vị trí: [{orderUpdate.delivery[0].toFixed(4)}, {orderUpdate.delivery[1].toFixed(4)}]</p>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <div className="user-page">
-      <Header />
-      <div className="content">
-        <div className="map-container">
-          {renderMap()}
-        </div>
-        <div className="sidebar">
-          {renderOrderDetails()}
->>>>>>> f79cecf924c75ac971f405a3dbbff57813436980
         </div>
       </div>
       
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Tạo đơn hàng mới">
+      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Tß║ío ─æ╞ín h├áng mß╗¢i">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input placeholder="Điểm nhận (lat,lng)" value={newOrder.pickup} readOnly style={{ flex: 1 }} />
-            <button onClick={() => { setPickMode('pickup'); setPickLabel('điểm nhận'); setShowPickModal(true); }} style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '0 12px', fontWeight: 600, cursor: 'pointer' }}>Chọn trên bản đồ</button>
+            <input placeholder="─Éiß╗âm nhß║¡n (lat,lng)" value={newOrder.pickup} readOnly style={{ flex: 1 }} />
+            <button onClick={() => { setPickMode('pickup'); setPickLabel('─æiß╗âm nhß║¡n'); setShowPickModal(true); }} style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '0 12px', fontWeight: 600, cursor: 'pointer' }}>Chß╗ìn tr├¬n bß║ún ─æß╗ô</button>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <input placeholder="Điểm giao (lat,lng)" value={newOrder.delivery} readOnly style={{ flex: 1 }} />
-            <button onClick={() => { setPickMode('delivery'); setPickLabel('điểm giao'); setShowPickModal(true); }} style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '0 12px', fontWeight: 600, cursor: 'pointer' }}>Chọn trên bản đồ</button>
+            <input placeholder="─Éiß╗âm giao (lat,lng)" value={newOrder.delivery} readOnly style={{ flex: 1 }} />
+            <button onClick={() => { setPickMode('delivery'); setPickLabel('─æiß╗âm giao'); setShowPickModal(true); }} style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '0 12px', fontWeight: 600, cursor: 'pointer' }}>Chß╗ìn tr├¬n bß║ún ─æß╗ô</button>
           </div>
-          <input placeholder="Khối lượng (kg)" type="number" value={newOrder.weight} onChange={e => setNewOrder({ ...newOrder, weight: e.target.value })} />
-          <input placeholder="ID người nhận" type="number" value={newOrder.receiverId || ''} onChange={e => setNewOrder({ ...newOrder, receiverId: e.target.value })} />
-          <button onClick={handleCreateOrder} disabled={creating} style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '10px 0', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>Tạo đơn hàng</button>
+          <input placeholder="Khß╗æi l╞░ß╗úng (kg)" type="number" value={newOrder.weight} onChange={e => setNewOrder({ ...newOrder, weight: e.target.value })} />
+          <input placeholder="ID ng╞░ß╗¥i nhß║¡n" type="number" value={newOrder.receiverId || ''} onChange={e => setNewOrder({ ...newOrder, receiverId: e.target.value })} />
+          <button onClick={handleCreateOrder} disabled={creating} style={{ background: '#2196f3', color: '#fff', border: 'none', borderRadius: 6, padding: '10px 0', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}>Tß║ío ─æ╞ín h├áng</button>
         </div>
       </Modal>
       <LocationPickerModal
