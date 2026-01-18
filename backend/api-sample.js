@@ -124,17 +124,35 @@ app.get('/api/orders', async (req, res, next) => {
       driverId, 
       senderId, 
       receiverId,
+      userId,
+      customerId,
       startDate, 
       endDate,
       assignmentType 
     } = req.query;
 
+    console.log('📋 GET /api/orders - Query params:', req.query);
+    console.log('📋 customerId:', customerId, 'userId:', userId);
+
     const query = {};
     
-    if (status) query.status = status;
-    if (driverId) query.driverId = parseInt(driverId);
-    if (senderId) query.senderId = parseInt(senderId);
-    if (receiverId) query.receiverId = parseInt(receiverId);
+    // Nếu có userId hoặc customerId, tìm orders mà user là sender HOẶC receiver
+    const userParam = userId || customerId;
+    if (userParam) {
+      const userIdNum = parseInt(userParam);
+      console.log('✅ Filtering by user ID:', userIdNum);
+      query.$or = [
+        { senderId: userIdNum },
+        { receiverId: userIdNum }
+      ];
+    } else {
+      // Logic cũ cho các filter khác
+      if (status) query.status = status;
+      if (driverId) query.driverId = parseInt(driverId);
+      if (senderId) query.senderId = parseInt(senderId);
+      if (receiverId) query.receiverId = parseInt(receiverId);
+    }
+    
     if (assignmentType) query.assignmentType = assignmentType;
     
     // Filter theo ngày
@@ -174,6 +192,13 @@ app.get('/api/orders/:id', async (req, res, next) => {
 app.post('/api/orders', async (req, res, next) => {
   try {
     const geocodingService = require('./utils/geocodingService');
+    
+    // Tự động generate ID nếu chưa có
+    if (!req.body.id) {
+      const lastOrder = await Order.findOne().sort({ id: -1 });
+      req.body.id = lastOrder ? lastOrder.id + 1 : 1;
+      console.log('Auto-generated order ID:', req.body.id);
+    }
     
     // Tự động geocode địa chỉ nếu chưa có
     if (req.body.pickup && !req.body.pickupAddress) {
@@ -238,6 +263,78 @@ app.post('/api/users', async (req, res, next) => {
     const user = await User.create(req.body);
     res.json(user);
   } catch (err) {
+    next(err);
+  }
+});
+
+// Cập nhật user
+app.put('/api/users/:id', async (req, res, next) => {
+  try {
+    const userId = parseInt(req.params.id);
+    
+    if (!User) {
+      return res.status(500).json({ 
+        error: 'Database not initialized',
+        message: 'Please try again in a few moments'
+      });
+    }
+
+    // Remove password from update if it's empty
+    const updateData = { ...req.body };
+    if (!updateData.password) {
+      delete updateData.password;
+    }
+
+    const user = await User.findOneAndUpdate(
+      { id: userId },
+      { $set: { ...updateData, updatedAt: new Date() } },
+      { new: true, runValidators: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ 
+        error: 'User not found',
+        message: `User with id ${userId} not found`
+      });
+    }
+
+    console.log(`User ${userId} updated successfully`);
+    res.json(user);
+  } catch (err) {
+    console.error('Error updating user:', err);
+    next(err);
+  }
+});
+
+// Xóa user
+app.delete('/api/users/:id', async (req, res, next) => {
+  try {
+    const userId = parseInt(req.params.id);
+    
+    if (!User) {
+      return res.status(500).json({ 
+        error: 'Database not initialized',
+        message: 'Please try again in a few moments'
+      });
+    }
+
+    const user = await User.findOneAndDelete({ id: userId });
+
+    if (!user) {
+      return res.status(404).json({ 
+        error: 'User not found',
+        message: `User with id ${userId} not found`
+      });
+    }
+
+    console.log(`User ${userId} deleted successfully`);
+    res.json({ 
+      success: true,
+      message: 'User deleted successfully',
+      user 
+    });
+  } catch (err) {
+    console.error('Error deleting user:', err);
     next(err);
   }
 });

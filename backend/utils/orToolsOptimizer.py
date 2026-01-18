@@ -6,47 +6,89 @@ from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 input_data = json.load(sys.stdin)
 vehicles = input_data['vehicles']
 orders = input_data['orders']
+manual_constraints = input_data.get('manualConstraints', {})  # {orderId: vehicleId}
 
 num_vehicles = len(vehicles)
 num_orders = len(orders)
 
-# 1. Chia đều đơn hàng cho các xe dựa trên tổ hợp đường chim bay tối ưu nhất
-# Tính tổng khoảng cách (pickup + delivery) từ mỗi đơn đến từng xe
-cost_matrix = np.zeros((num_vehicles, num_orders))
-for vi, v in enumerate(vehicles):
-    for oi, o in enumerate(orders):
-        pickup_dist = np.linalg.norm(np.array(v['position']) - np.array(o['pickup']))
-        delivery_dist = np.linalg.norm(np.array(v['position']) - np.array(o['delivery']))
-        cost_matrix[vi, oi] = pickup_dist + delivery_dist
-
-# Greedy assignment: gán từng đơn cho xe gần nhất còn slot, đảm bảo chia đều
-orders_per_vehicle = (num_orders + num_vehicles - 1) // num_vehicles
+# 1. Handle manual constraints first
 order_assignments = {v['id']: [] for v in vehicles}
 assigned = set()
-order_indices = list(range(num_orders))
-order_indices.sort(key=lambda oi: cost_matrix[:, oi].min())
-for oi in order_indices:
-    best_vi = None
-    best_cost = float('inf')
-    for vi in range(num_vehicles):
-        v = vehicles[vi]
-        if len(order_assignments[v['id']]) < orders_per_vehicle:
-            if cost_matrix[vi, oi] < best_cost:
-                best_cost = cost_matrix[vi, oi]
-                best_vi = vi
-    if best_vi is not None:
-        v_id = vehicles[best_vi]['id']
-        order_assignments[v_id].append(orders[oi])
-        assigned.add(oi)
-# Nếu còn đơn chưa gán (do chia lẻ), gán tiếp cho các xe còn slot
-for oi in range(num_orders):
-    if oi not in assigned:
+
+# Assign manually constrained orders
+for order_id_str, vehicle_id in manual_constraints.items():
+    order_id = int(order_id_str)
+    order = next((o for o in orders if o['id'] == order_id), None)
+    if order:
+        order_assignments[vehicle_id].append(order)
+        assigned.add(orders.index(order))
+        print(f"Manual constraint: Order {order_id} assigned to Vehicle {vehicle_id}", file=sys.stderr)
+
+# Get remaining orders to assign
+remaining_orders = [o for oi, o in enumerate(orders) if oi not in assigned]
+num_remaining = len(remaining_orders)
+
+if num_remaining > 0:
+    # 2. Chia đều đơn hàng còn lại cho các xe dựa trên tổ hợp đường chim bay tối ưu nhất
+    # Tính tổng khoảng cách (pickup + delivery) từ mỗi đơn đến từng xe
+    cost_matrix = np.zeros((num_vehicles, num_remaining))
+    for vi, v in enumerate(vehicles):
+        for oi, o in enumerate(remaining_orders):
+            pickup_dist = np.linalg.norm(np.array(v['position']) - np.array(o['pickup']))
+            delivery_dist = np.linalg.norm(np.array(v['position']) - np.array(o['delivery']))
+            cost_matrix[vi, oi] = pickup_dist + delivery_dist
+
+    # Calculate available capacity for each vehicle
+    vehicle_available_slots = {}
+    total_manual_assigned = len([o for orders_list in order_assignments.values() for o in orders_list])
+    remaining_slots = num_orders - total_manual_assigned
+    base_slots_per_vehicle = remaining_slots // num_vehicles
+    
+    for vi, v in enumerate(vehicles):
+        current_load = len(order_assignments[v['id']])
+        vehicle_available_slots[vi] = base_slots_per_vehicle
+        
+    # Greedy assignment: gán từng đơn cho xe gần nhất còn slot
+    order_indices = list(range(num_remaining))
+    order_indices.sort(key=lambda oi: cost_matrix[:, oi].min())
+    
+    for oi in order_indices:
+        best_vi = None
+        best_cost = float('inf')
         for vi in range(num_vehicles):
             v = vehicles[vi]
-            if len(order_assignments[v['id']]) < orders_per_vehicle:
-                order_assignments[v['id']].append(orders[oi])
-                assigned.add(oi)
-                break
+            current_assigned = len(order_assignments[v['id']])
+            # Check weight capacity
+            current_weight = sum(ord['weight'] for ord in order_assignments[v['id']])
+            if current_weight + remaining_orders[oi]['weight'] > v['maxLoad']:
+                continue
+            # Find best vehicle with available capacity
+            if vehicle_available_slots[vi] > 0 or current_assigned == 0:
+                if cost_matrix[vi, oi] < best_cost:
+                    best_cost = cost_matrix[vi, oi]
+                    best_vi = vi
+        
+        if best_vi is not None:
+            v_id = vehicles[best_vi]['id']
+            order_assignments[v_id].append(remaining_orders[oi])
+            vehicle_available_slots[best_vi] -= 1
+            assigned.add(orders.index(remaining_orders[oi]))
+    
+    # Nếu còn đơn chưa gán, gán cho xe có tải trọng thấp nhất
+    for oi in range(num_remaining):
+        if orders.index(remaining_orders[oi]) not in assigned:
+            best_vi = None
+            min_weight = float('inf')
+            for vi in range(num_vehicles):
+                v = vehicles[vi]
+                current_weight = sum(ord['weight'] for ord in order_assignments[v['id']])
+                if current_weight < min_weight and current_weight + remaining_orders[oi]['weight'] <= v['maxLoad']:
+                    min_weight = current_weight
+                    best_vi = vi
+            if best_vi is not None:
+                v_id = vehicles[best_vi]['id']
+                order_assignments[v_id].append(remaining_orders[oi])
+                assigned.add(orders.index(remaining_orders[oi]))
 
 result = {'assignments': {}, 'routes': []}
 

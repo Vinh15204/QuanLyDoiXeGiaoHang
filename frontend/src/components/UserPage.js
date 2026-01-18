@@ -2,7 +2,6 @@
 import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMapEvents } from 'react-leaflet';
 import signalRService from '../services/signalRService';
-import ordersData from '../data/orders.json';
 import usersFlat from '../data/users_flat.json';
 import { useRoute } from '../contexts/RouteContext';
 import Modal from './Modal';
@@ -11,6 +10,7 @@ import '../utils/mapIcons';
 import Header from './Header';
 import '../styles/User.css';
 import '../styles/ModernDashboard.css';
+import API_URL from '../config';
 
 const HANOI_CENTER = [21.0285, 105.8542];
 
@@ -62,46 +62,61 @@ function UserPage() {
   const [pickMode, setPickMode] = useState(null); // 'pickup' | 'delivery' | null
   const [showPickModal, setShowPickModal] = useState(false);
   const [pickLabel, setPickLabel] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  // Chß╗ë kiß╗âm tra ─æ─âng nhß║¡p khi mount, kh├┤ng phß╗Ñ thuß╗Öc navigate
+  // Lấy đơn hàng của user từ API
+  const fetchUserOrders = async (userId) => {
+    try {
+      setLoading(true);
+      // Gọi API với parameter userId để lấy orders mà user là sender HOẶC receiver
+      const response = await fetch(`${API_URL}/api/orders?userId=${userId}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const orders = await response.json();
+      
+      console.log('Fetched orders for user', userId, ':', orders.length);
+      console.log('Orders:', orders);
+      setUserOrders(orders);
+    } catch (error) {
+      console.error('Error fetching user orders:', error);
+      setUserOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Kiểm tra đăng nhập khi mount
   useEffect(() => {
     const userStr = localStorage.getItem('currentUser');
+    console.log('localStorage currentUser:', userStr);
+    
     if (!userStr || JSON.parse(userStr).role !== 'user') {
       setShouldRedirect(true);
       return;
     }
     const user = JSON.parse(userStr);
     setCurrentUser(user);
+    
+    const userId = Number(user.id);
+    console.log('Current User:', user);
+    console.log('Current User ID:', userId, 'Type:', typeof userId);
+    console.log('API URL:', API_URL);
+    console.log('Calling API:', `${API_URL}/api/orders?userId=${userId}`);
+    
+    // Lấy đơn hàng từ API
+    fetchUserOrders(userId);
 
-    // ╞»u ti├¬n lß║Ñy ─æ╞ín h├áng tß╗½ localStorage
-    const savedOrders = localStorage.getItem(`userOrders_${user.id}`);
-    let myOrders;
-    if (savedOrders) {
-      myOrders = JSON.parse(savedOrders);
-    } else {
-      // Lß╗ìc ─æ╞ín h├áng cß╗ºa user hiß╗çn tß║íi tß╗½ file t─⌐nh
-      myOrders = ordersData.filter(order => 
-        order.senderId === user.id || order.receiverId === user.id
-      );
-    }
-    setUserOrders(myOrders);
-
-    // ─É─âng k├╜ nhß║¡n cß║¡p nhß║¡t ─æ╞ín h├áng qua signalR nß║┐u cß║ºn
+    // Đăng ký nhận cập nhật đơn hàng qua signalR
     signalRService.registerUser(user.id);
-    // TODO: Nß║┐u muß╗æn cß║¡p nhß║¡t realtime, cß║ºn lß║»ng nghe sß╗▒ kiß╗çn v├á cß║¡p nhß║¡t userOrders
 
     // Cleanup
     return () => {
-      // signalRService.unregisterUser(user.id); // Nß║┐u c├│ h├ám n├áy
+      // signalRService.unregisterUser(user.id);
     };
   }, []);
-
-  // L╞░u userOrders v├áo localStorage mß╗ùi khi thay ─æß╗òi
-  useEffect(() => {
-    if (currentUser && userOrders.length > 0) {
-      localStorage.setItem(`userOrders_${currentUser.id}`, JSON.stringify(userOrders));
-    }
-  }, [userOrders, currentUser]);
 
   // Chß╗ë navigate khi shouldRedirect ─æß╗òi sang true
   useEffect(() => {
@@ -122,14 +137,16 @@ function UserPage() {
         style={{ height: "500px", width: "100%", border: "1px solid #ccc", borderRadius: "4px" }}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-        {userOrders.map(order => (
-          <React.Fragment key={order.id}>
+        {userOrders.map(order => {
+          const orderId = order._id || order.id;
+          return (
+          <React.Fragment key={orderId}>
             {Array.isArray(order.pickup) && order.pickup.length === 2 && order.pickup.every(x => typeof x === 'number' && !isNaN(x)) && (
               <Marker position={order.pickup}>
                 <Popup>
                   <div>
                     <h4>─Éiß╗âm nhß║¡n h├áng</h4>
-                    <p>─É╞ín h├áng #{order.id}</p>
+                    <p>─É╞ín h├áng #{orderId}</p>
                   </div>
                 </Popup>
               </Marker>
@@ -139,7 +156,7 @@ function UserPage() {
                 <Popup>
                   <div>
                     <h4>─Éiß╗âm giao h├áng</h4>
-                    <p>─É╞ín h├áng #{order.id}</p>
+                    <p>─É╞ín h├áng #{orderId}</p>
                   </div>
                 </Popup>
               </Marker>
@@ -148,7 +165,8 @@ function UserPage() {
               <Polyline positions={order.route} color="blue" weight={3} />
             )}
           </React.Fragment>
-        ))}
+        );
+        })}
         {/* Hiß╗ân thß╗ï marker chß╗ìn ─æiß╗âm nhß║¡n/giao khi tß║ío ─æ╞ín mß╗¢i */}
         {showModal && pickMode === 'pickup' && (
           <LocationPicker
@@ -207,7 +225,7 @@ function UserPage() {
       };
       const order = {
         id: getNewOrderId(),
-        senderId: currentUser.id,
+        senderId: Number(currentUser.id),
         receiverId: Number(newOrder.receiverId),
         pickup: pickupArr,
         delivery: deliveryArr,
@@ -223,8 +241,9 @@ function UserPage() {
       });
       if (res.ok) {
         const created = await res.json();
-        setUserOrders(prev => [...prev, created]);
-        alert(`Tß║ío ─æ╞ín h├áng th├ánh c├┤ng! M├ú ─æ╞ín h├áng: ${created.id}`);
+        // Refresh lại danh sách đơn hàng từ API
+        await fetchUserOrders(Number(currentUser.id));
+        alert(`Tß║ío ─æ╞ín h├áng th├ánh c├┤ng! M├ú ─æ╞ín h├áng: ${created.id || created._id}`);
       } else {
         alert('Tß║ío ─æ╞ín h├áng thß║Ñt bß║íi!');
       }
@@ -303,7 +322,12 @@ function UserPage() {
                 <h2 className="card-title">≡ƒôï ─É╞ín h├áng cß╗ºa t├┤i</h2>
               </div>
               <div className="card-body">
-                {userOrders.length === 0 ? (
+                {loading ? (
+                  <div className="empty-state">
+                    <div className="empty-icon">⏳</div>
+                    <p className="empty-text">Đang tải đơn hàng...</p>
+                  </div>
+                ) : userOrders.length === 0 ? (
                   <div className="empty-state">
                     <div className="empty-icon">≡ƒô¡</div>
                     <p className="empty-text">Ch╞░a c├│ ─æ╞ín h├áng n├áo</p>
@@ -312,25 +336,40 @@ function UserPage() {
                 ) : (
                   <div className="orders-list">
                     {userOrders.map(order => {
-                      const routeInfo = getOrderRouteInfo(order.id);
+                      const orderId = order._id || order.id;
+                      const routeInfo = getOrderRouteInfo(orderId);
+                      
+                      // Xác định vai trò của user
+                      const isSender = Number(order.senderId) === Number(currentUser?.id);
+                      const isReceiver = Number(order.receiverId) === Number(currentUser?.id);
+                      const userRole = isSender ? 'Người gửi' : (isReceiver ? 'Người nhận' : 'Không xác định');
+                      const roleIcon = isSender ? '📤' : '📥';
+                      const roleColor = isSender ? '#3498db' : '#27ae60';
+                      
+                      // Tìm thông tin tài xế
+                      const driver = order.driverId ? usersFlat.find(u => u.id === order.driverId && u.role === 'driver') : null;
+                      const driverName = driver ? driver.name : (order.driverId ? `Tài xế #${order.driverId}` : 'Chưa phân công');
+                      
                       const statusColors = {
                         pending: '#f39c12',
+                        assigned: '#9b59b6',
                         processing: '#3498db',
                         delivered: '#27ae60',
                         cancelled: '#e74c3c'
                       };
                       const statusLabels = {
-                        pending: 'Chß╗¥ xß╗¡ l├╜',
-                        processing: '─Éang giao',
-                        delivered: '─É├ú giao',
-                        cancelled: '─É├ú hß╗ºy'
+                        pending: 'Chờ xử lý',
+                        assigned: 'Đã phân công',
+                        processing: 'Đang giao',
+                        delivered: 'Đã giao',
+                        cancelled: 'Đã hủy'
                       };
                       return (
-                        <div key={order.id} className="order-card">
+                        <div key={orderId} className="order-card">
                           <div className="order-header">
                             <div className="order-title">
-                              <span className="order-icon">≡ƒôª</span>
-                              <span className="order-id">─É╞ín h├áng #{order.id}</span>
+                              <span className="order-icon">📦</span>
+                              <span className="order-id">Đơn hàng #{orderId}</span>
                             </div>
                             <span className="status-badge" style={{
                               background: `${statusColors[order.status] || '#95a5a6'}20`,
@@ -342,42 +381,61 @@ function UserPage() {
                           </div>
                           
                           <div className="order-details">
-                            <div className="detail-row">
-                              <span className="detail-icon">ΓÜû∩╕Å</span>
-                              <span className="detail-label">Trß╗ìng l╞░ß╗úng:</span>
-                              <span className="detail-value">{order.weight}kg</span>
-                            </div>
-                            <div className="detail-row">
-                              <span className="detail-icon">≡ƒôì</span>
-                              <span className="detail-label">─Éiß╗âm nhß║¡n:</span>
-                              <span className="detail-value">[{order.pickup[0].toFixed(4)}, {order.pickup[1].toFixed(4)}]</span>
-                            </div>
-                            <div className="detail-row">
-                              <span className="detail-icon">≡ƒÄ»</span>
-                              <span className="detail-label">─Éiß╗âm giao:</span>
-                              <span className="detail-value">[{order.delivery[0].toFixed(4)}, {order.delivery[1].toFixed(4)}]</span>
+                            {/* Vai trò của user */}
+                            <div className="detail-row" style={{ 
+                              background: `${roleColor}10`, 
+                              padding: '8px 12px', 
+                              borderRadius: '6px',
+                              marginBottom: '8px'
+                            }}>
+                              <span className="detail-icon">{roleIcon}</span>
+                              <span className="detail-label" style={{ fontWeight: '700', color: roleColor }}>Vai trò:</span>
+                              <span className="detail-value" style={{ fontWeight: '700', color: roleColor }}>{userRole}</span>
                             </div>
                             
-                            {routeInfo && (
+                            <div className="detail-row">
+                              <span className="detail-icon">⚖️</span>
+                              <span className="detail-label">Trọng lượng:</span>
+                              <span className="detail-value">{order.weight}kg</span>
+                            </div>
+                            
+                            {order.pickupAddress && (
+                              <div className="detail-row">
+                                <span className="detail-icon">📍</span>
+                                <span className="detail-label">Điểm nhận:</span>
+                                <span className="detail-value">{order.pickupAddress}</span>
+                              </div>
+                            )}
+                            
+                            {order.deliveryAddress && (
+                              <div className="detail-row">
+                                <span className="detail-icon">🏁</span>
+                                <span className="detail-label">Điểm giao:</span>
+                                <span className="detail-value">{order.deliveryAddress}</span>
+                              </div>
+                            )}
+                            
+                            {/* Thông tin tài xế và thời gian */}
+                            {(order.driverId || routeInfo) && (
                               <>
                                 <div className="divider"></div>
                                 <div className="detail-row">
-                                  <span className="detail-icon">≡ƒÜÜ</span>
-                                  <span className="detail-label">T├ái xß║┐:</span>
-                                  <span className="detail-value">{routeInfo.driverName}</span>
+                                  <span className="detail-icon">🚚</span>
+                                  <span className="detail-label">Tài xế:</span>
+                                  <span className="detail-value">{driverName}</span>
                                 </div>
-                                {routeInfo.pickupTime && (
+                                {routeInfo && routeInfo.pickupTime && (
                                   <div className="detail-row">
-                                    <span className="detail-icon">ΓÅ░</span>
-                                    <span className="detail-label">─Éß║┐n ─æiß╗âm nhß║¡n:</span>
-                                    <span className="detail-value">{routeInfo.pickupTime} ph├║t</span>
+                                    <span className="detail-icon">⏱️</span>
+                                    <span className="detail-label">Đến điểm nhận:</span>
+                                    <span className="detail-value">{routeInfo.pickupTime} phút</span>
                                   </div>
                                 )}
-                                {routeInfo.deliveryTime && (
+                                {routeInfo && routeInfo.deliveryTime && (
                                   <div className="detail-row">
-                                    <span className="detail-icon">ΓÅ▒∩╕Å</span>
-                                    <span className="detail-label">─Éß║┐n ─æiß╗âm giao:</span>
-                                    <span className="detail-value">{routeInfo.deliveryTime} ph├║t</span>
+                                    <span className="detail-icon">⏲️</span>
+                                    <span className="detail-label">Đến điểm giao:</span>
+                                    <span className="detail-value">{routeInfo.deliveryTime} phút</span>
                                   </div>
                                 )}
                               </>

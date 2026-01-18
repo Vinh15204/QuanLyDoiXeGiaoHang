@@ -67,8 +67,10 @@ const routeSchema = new mongoose.Schema({
         arrivalTime: Number,
         serviceTime: Number,
         load: Number,
-        pickupAddress: String,
-        deliveryAddress: String
+        address: String,  // Generic address (for depot)
+        pickupAddress: String,  // Pickup-specific address
+        deliveryAddress: String,  // Delivery-specific address
+        weight: Number  // Weight for this stop
     }],
     // Thông tin chi tiết về tuyến đường
     routeDetails: {

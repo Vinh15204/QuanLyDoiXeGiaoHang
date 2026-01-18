@@ -174,10 +174,70 @@ function OrdersManagement() {
             }
             
             const result = await response.json();
-            console.log('✅ Optimization result:', result);
             
-            // Routes are saved in database by API
-            // Dashboard will fetch from API automatically
+            // Log detailed optimization results to console with colors
+            console.log('\n' + '='.repeat(80));
+            console.log('%c📊 OPTIMIZATION RESULTS', 'font-size: 16px; font-weight: bold; color: #2563eb;');
+            console.log('='.repeat(80));
+            
+            const engine = result.optimizationEngine || 'Unknown';
+            const engineColor = engine === 'OR-Tools' ? '#10b981' : engine === 'JavaScript' ? '#f59e0b' : '#6b7280';
+            const engineIcon = engine === 'OR-Tools' ? '🔬' : engine === 'JavaScript' ? '⚙️' : '❓';
+            
+            console.log(`%c${engineIcon} Engine: ${engine}`, `font-weight: bold; color: ${engineColor}`);
+            console.log('📏 Total Distance:', result.stats.totalDistance?.toFixed(2) || 'N/A', 'km');
+            console.log('⏱️  Makespan:', result.stats.makespan?.toFixed(2) || 'N/A', 'min');
+            console.log('📦 Orders:', result.stats.assignedOrders, '/', result.stats.totalOrders);
+            console.log('🚚 Vehicles:', result.stats.vehiclesWithRoutes, '/', result.stats.totalVehicles);
+            console.log('');
+            console.log('%c📋 ROUTE SEQUENCES:', 'font-weight: bold; color: #8b5cf6;');
+            
+            // Fetch routes to display sequences
+            const routesRes = await fetch(`${API_BASE_URL}/api/routes`);
+            if (routesRes.ok) {
+                const data = await routesRes.json();
+                const routes = data.routes || data; // Handle both { routes: [...] } and direct array
+                console.log('Routes response:', routes, 'Type:', typeof routes, 'Is Array:', Array.isArray(routes));
+                
+                if (!Array.isArray(routes)) {
+                    console.warn('⚠️ Routes is not an array, skipping sequence display');
+                } else if (routes.length === 0) {
+                    console.log('ℹ️ No routes found');
+                } else {
+                    routes.forEach(route => {
+                    if (route.stops && route.stops.length > 0) {
+                        const stops = route.stops.filter(s => s.type !== 'depot');
+                        const sequence = stops.map(s => `${s.type}:${s.orderId}`).join(' → ');
+                        
+                        // Check if pattern is pickup-delivery-pickup-delivery (alternating)
+                        let isAlternating = true;
+                        for (let i = 0; i < stops.length - 1; i += 2) {
+                            if (stops[i]?.type !== 'pickup' || stops[i + 1]?.type !== 'delivery') {
+                                isAlternating = false;
+                                break;
+                            }
+                        }
+                        
+                        const pattern = isAlternating ? '📦🎯 (pickup-delivery pairs)' : '🔀 (optimized mix)';
+                        console.log(`   %cVehicle ${route.vehicleId}:`, 'color: #059669; font-weight: bold', sequence, pattern);
+                    }
+                    });
+                }
+            }
+            console.log('='.repeat(80) + '\n');
+            
+            // Additional analysis
+            console.log('%c🔍 PATTERN ANALYSIS:', 'font-weight: bold; color: #dc2626;');
+            if (engine === 'OR-Tools') {
+                console.log('   ✅ Using Google OR-Tools optimizer');
+                console.log('   ✅ Route sequences optimized for minimum distance');
+                console.log('   ✅ Can mix pickup/delivery order (pickup-pickup-delivery-delivery)');
+            } else if (engine === 'JavaScript') {
+                console.log('   ⚠️  Using JavaScript fallback optimizer');
+                console.log('   ⚠️  May use simple pickup-delivery pairing');
+                console.log('   💡 Install Python + OR-Tools for better optimization');
+            }
+            console.log('');
             
             // Reload orders to reflect updated assignments
             console.log('🔄 Reloading orders after optimization...');
@@ -189,12 +249,20 @@ function OrdersManagement() {
                 setLoading(false);
             }
             
-            // Show success message
-            alert(`Phân công thành công!\n` +
+            // Show success message with engine info
+            const engineInfo = result.optimizationEngine === 'OR-Tools' ? 
+                '🔬 Google OR-Tools' : 
+                result.optimizationEngine === 'JavaScript' ? 
+                '⚙️ JavaScript Fallback' : 
+                '❓ Unknown';
+            
+            alert(`Phân công thành công!\n\n` +
+                  `Engine: ${engineInfo}\n` +
                   `- Tổng đơn hàng: ${result.stats.totalOrders}\n` +
                   `- Đơn đã phân công: ${result.stats.assignedOrders}\n` +
-                  `- Số xe sử dụng: ${result.stats.vehiclesWithRoutes}/${result.stats.totalVehicles}\n\n` +
-                  `Danh sách đơn hàng đã được cập nhật!\nXem chi tiết tuyến đường trên Dashboard.`);
+                  `- Số xe sử dụng: ${result.stats.vehiclesWithRoutes}/${result.stats.totalVehicles}\n` +
+                  `- Quãng đường: ${result.stats.totalDistance?.toFixed(2) || 'N/A'} km\n\n` +
+                  `Xem chi tiết trong Console (F12)!`);
             
             // Optional: Navigate to Dashboard to see routes
             // Uncomment if you want to auto-navigate

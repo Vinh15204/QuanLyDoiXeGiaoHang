@@ -11,13 +11,20 @@ import UserPage from "./components/UserPage";
 import DriverPage from "./components/DriverPage";
 import DriverOrders from "./components/DriverOrders";
 import DriverDelivered from "./components/DriverDelivered";
+import DriverLayout from "./components/DriverLayout";
 import ModernDashboardContent from "./components/ModernDashboardContent";
 import DashboardLayout from "./components/DashboardLayout";
 import VehiclesManagementNew from "./components/VehiclesManagementNew";
 import OrdersManagementNew from "./components/OrdersManagementNew";
 import DriversManagement from "./components/DriversManagement";
+import UsersManagement from "./components/UsersManagement";
 import Analytics from "./components/Analytics";
 import Settings from "./components/Settings";
+import UserDashboardLayout from "./components/user/UserDashboardLayout";
+import CreateOrder from "./components/user/CreateOrder";
+import OrdersInProgress from "./components/user/OrdersInProgress";
+import OrdersHistory from "./components/user/OrdersHistory";
+import UserSettings from "./components/user/UserSettings";
 import { RouteProvider } from "./contexts/RouteContext";
 import "./styles/globals.css";
 import "./App.css";
@@ -43,22 +50,27 @@ function App() {
           <Route path="vehicles" element={<VehiclesManagementNew />} />
           <Route path="orders" element={<OrdersManagementNew />} />
           <Route path="drivers" element={<DriversManagement />} />
+          <Route path="users" element={<UsersManagement />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="settings" element={<Settings />} />
           <Route index element={<Navigate to="map" replace />} />
         </Route>
         
-        {/* User routes - WITH RouteProvider for backward compatibility */}
-        <Route path="/user/*" element={
-          <RouteProvider>
-            <UserPage />
-          </RouteProvider>
-        } />
+        {/* User routes - with UserDashboardLayout wrapper */}
+        <Route path="/user" element={<UserDashboardLayout />}>
+          <Route path="orders/create" element={<CreateOrder />} />
+          <Route path="orders/in-progress" element={<OrdersInProgress />} />
+          <Route path="orders/history" element={<OrdersHistory />} />
+          <Route path="settings" element={<UserSettings />} />
+          <Route index element={<Navigate to="orders/create" replace />} />
+        </Route>
         
-        {/* Driver routes */}
-        <Route path="/driver" element={<DriverPage />} />
-        <Route path="/driver/orders" element={<DriverOrders />} />
-        <Route path="/driver/delivered" element={<DriverDelivered />} />
+        {/* Driver routes - with DriverLayout wrapper */}
+        <Route path="/driver" element={<DriverLayout />}>
+          <Route index element={<DriverPage />} />
+          <Route path="orders" element={<DriverOrders />} />
+          <Route path="delivered" element={<DriverDelivered />} />
+        </Route>
         
         {/* Root route - redirect based on login status */}
         <Route path="/" element={

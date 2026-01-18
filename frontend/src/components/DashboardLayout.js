@@ -26,6 +26,7 @@ function DashboardLayout() {
         if (path.includes('vehicles')) return 'Fleet Management';
         if (path.includes('orders')) return 'Deliveries Management';
         if (path.includes('drivers')) return 'Drivers Management';
+        if (path.includes('users')) return 'Users Management';
         if (path.includes('analytics')) return 'Analytics';
         if (path.includes('settings')) return 'Settings';
         return 'Dashboard';
@@ -36,6 +37,7 @@ function DashboardLayout() {
         if (path.includes('vehicles')) return 'Quản lý đội xe và phương tiện';
         if (path.includes('orders')) return 'Quản lý đơn hàng và giao hàng';
         if (path.includes('drivers')) return 'Quản lý thông tin tài xế';
+        if (path.includes('users')) return 'Quản lý người dùng hệ thống';
         if (path.includes('analytics')) return 'Phân tích hiệu suất và thống kê';
         if (path.includes('settings')) return 'Cài đặt hệ thống và tùy chọn';
         return 'Tổng quan hệ thống quản lý giao hàng';
@@ -50,6 +52,7 @@ function DashboardLayout() {
         { name: 'Fleet', icon: '🚛', path: '/admin/vehicles' },
         { name: 'Deliveries', icon: '📦', path: '/admin/orders' },
         { name: 'Drivers', icon: '👤', path: '/admin/drivers' },
+        { name: 'Users', icon: '👥', path: '/admin/users' },
         { name: 'Analytics', icon: '📈', path: '/admin/analytics' },
         { name: 'Settings', icon: '⚙️', path: '/admin/settings' }
     ];

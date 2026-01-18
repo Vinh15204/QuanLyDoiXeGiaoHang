@@ -164,7 +164,9 @@ function VehiclesManagementNew() {
         <div className="management-content">
                     <div className="page-header">
                         <h1>Fleet Management</h1>
-                        <button className="btn-primary" onClick={handleAddVehicle}>Add New Vehicle</button>
+                        <button className="btn-primary" onClick={handleAddVehicle}>
+                            ➕ Thêm
+                        </button>
                     </div>
 
                     {loading && <div className="loading">Loading vehicles...</div>}

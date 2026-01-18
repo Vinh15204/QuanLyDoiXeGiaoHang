@@ -10,17 +10,37 @@ router.get('/', async (req, res) => {
             driverId, 
             senderId, 
             receiverId,
+            userId,
+            customerId, // Thêm customerId (có thể là alias của userId)
             startDate, 
             endDate,
             assignmentType 
         } = req.query;
 
+        console.log('📋 GET /api/orders - Full URL:', req.url);
+        console.log('📋 GET /api/orders - Query params:', req.query);
+        console.log('📋 userId from query:', userId, 'Type:', typeof userId);
+        console.log('📋 customerId from query:', customerId, 'Type:', typeof customerId);
+
         const query = {};
         
-        if (status) query.status = status;
-        if (driverId) query.driverId = parseInt(driverId);
-        if (senderId) query.senderId = parseInt(senderId);
-        if (receiverId) query.receiverId = parseInt(receiverId);
+        // Nếu có userId hoặc customerId, tìm orders mà user là sender HOẶC receiver
+        const userParam = userId || customerId;
+        if (userParam) {
+            const userIdNum = parseInt(userParam);
+            console.log('✅ Filtering by user ID:', userIdNum);
+            query.$or = [
+                { senderId: userIdNum },
+                { receiverId: userIdNum }
+            ];
+        } else {
+            // Logic cũ cho các filter khác
+            if (status) query.status = status;
+            if (driverId) query.driverId = parseInt(driverId);
+            if (senderId) query.senderId = parseInt(senderId);
+            if (receiverId) query.receiverId = parseInt(receiverId);
+        }
+        
         if (assignmentType) query.assignmentType = assignmentType;
         
         // Filter theo ngày
@@ -34,7 +54,9 @@ router.get('/', async (req, res) => {
             }
         }
 
+        console.log('MongoDB query:', JSON.stringify(query));
         const orders = await Order.find(query).sort({ createdAt: -1 });
+        console.log('Found orders:', orders.length);
         res.json(orders);
     } catch (error) {
         console.error('Error fetching orders:', error);

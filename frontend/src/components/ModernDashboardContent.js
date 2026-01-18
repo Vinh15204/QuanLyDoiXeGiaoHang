@@ -9,16 +9,16 @@ import '../styles/ModernDashboard.css';
 const HANOI_CENTER = [21.0285, 105.8542];
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
-// Colors for different routes
+// Colors for different routes - Updated with modern palette
 const ROUTE_COLORS = [
-    '#ef4444', // red
-    '#3b82f6', // blue
-    '#10b981', // green
-    '#f59e0b', // yellow
-    '#8b5cf6', // purple
-    '#ec4899', // pink
-    '#14b8a6', // teal
-    '#f97316', // orange
+    '#dc3545', // danger red
+    '#007bff', // primary blue
+    '#28a745', // success green
+    '#ffc107', // warning yellow
+    '#6f42c1', // purple
+    '#e83e8c', // pink
+    '#20c997', // teal/info
+    '#fd7e14', // orange
 ];
 
 function ModernDashboard() {
@@ -400,13 +400,19 @@ function ModernDashboard() {
                                             }}
                                             title="Làm mới dữ liệu"
                                             style={{
-                                                background: 'none',
-                                                border: 'none',
-                                                fontSize: '16px',
+                                                background: 'rgba(59, 130, 246, 0.1)',
+                                                border: '1px solid rgba(59, 130, 246, 0.3)',
+                                                borderRadius: '8px',
+                                                fontSize: '14px',
                                                 cursor: 'pointer',
-                                                padding: '5px 10px',
-                                                marginLeft: '5px'
+                                                padding: '6px 12px',
+                                                marginLeft: '8px',
+                                                color: '#3b82f6',
+                                                fontWeight: '500',
+                                                transition: 'all 0.2s'
                                             }}
+                                            onMouseEnter={(e) => e.target.style.background = 'rgba(59, 130, 246, 0.2)'}
+                                            onMouseLeave={(e) => e.target.style.background = 'rgba(59, 130, 246, 0.1)'}
                                         >
                                             🔄
                                         </button>
@@ -591,7 +597,7 @@ function ModernDashboard() {
                                                     >
                                                         <Popup maxWidth={300}>
                                                             <div style={{ minWidth: '250px' }}>
-                                                                <h3 style={{ margin: '0 0 10px 0', fontSize: '16px', borderBottom: '2px solid #3498db', paddingBottom: '5px' }}>
+                                                                <h3 style={{ margin: '0 0 10px 0', fontSize: '16px', borderBottom: '2px solid var(--color-primary)', paddingBottom: '5px', color: 'var(--color-text-primary)' }}>
                                                                     {stop.type === 'pickup' ? '📦 Điểm lấy hàng' : '🎯 Điểm giao hàng'}
                                                                 </h3>
                                                                 

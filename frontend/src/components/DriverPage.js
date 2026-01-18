@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import signalRService from '../services/signalRService';
 import { vehicleIcon, pickupIcon, deliveryIcon } from '../utils/mapIcons';
@@ -24,17 +24,18 @@ function MapController({ center, zoom }) {
 
 function DriverPage() {
     const navigate = useNavigate();
-    const [currentDriver] = useState(() => {
-        const user = localStorage.getItem('currentUser');
-        return user ? JSON.parse(user) : null;
-    });
+    const { currentDriver } = useOutletContext();
     const [route, setRoute] = useState(null);
     const [isConnected, setIsConnected] = useState(false);
     const [currentPosition, setCurrentPosition] = useState(null);
     const [selectedStop, setSelectedStop] = useState(null);
     const [mapCenter, setMapCenter] = useState(null);
     const [viewMode, setViewMode] = useState('map'); // 'map' or 'list'
+    const [mapDisplayMode, setMapDisplayMode] = useState('full'); // 'full' or 'next'
     const [orders, setOrders] = useState([]);
+    const [nextStopRoute, setNextStopRoute] = useState(null); // OSRM route to next stop
+    const [vehicleCurrentPosition, setVehicleCurrentPosition] = useState(null); // Current vehicle position
+    const [lastCompletedStop, setLastCompletedStop] = useState(null); // Track last completed stop
 
     // Load saved route - ALWAYS fetch from API first for latest data
     useEffect(() => {
@@ -68,7 +69,31 @@ function DriverPage() {
                                 pickup: driverRoute.stops?.filter(s => s.type === 'pickup').length,
                                 delivery: driverRoute.stops?.filter(s => s.type === 'delivery').length
                             });
+                            
+                            // Check if stops have address data
+                            const hasAddresses = driverRoute.stops?.some(s => 
+                                s.pickupAddress || s.deliveryAddress || s.address
+                            );
+                            console.log('🏷️ Route has addresses:', hasAddresses);
+                            
+                            // If no addresses found, clear old cache
+                            if (!hasAddresses) {
+                                console.warn('⚠️ Route missing address data - clearing cache');
+                                localStorage.removeItem(`driverRoute_${currentDriver.vehicleId}`);
+                            }
+                            
                             setRoute(driverRoute);
+                            
+                            // Initialize vehicle position if not set
+                            if (!vehicleCurrentPosition) {
+                                const depotStop = driverRoute.stops?.find(s => s.type === 'depot');
+                                const initialPos = depotStop?.point || driverRoute.vehiclePosition;
+                                if (initialPos) {
+                                    setVehicleCurrentPosition(initialPos);
+                                    console.log('🚗 Initial vehicle position set:', initialPos);
+                                }
+                            }
+                            
                             // Save to localStorage
                             localStorage.setItem(`driverRoute_${currentDriver.vehicleId}`, JSON.stringify(driverRoute));
                             console.log('💾 Route saved to localStorage');
@@ -80,12 +105,8 @@ function DriverPage() {
                 }
             } catch (error) {
                 console.error('❌ Error fetching routes:', error);
-                // Fallback to localStorage if API fails
-                const savedRoute = localStorage.getItem(`driverRoute_${currentDriver.vehicleId}`);
-                if (savedRoute) {
-                    console.log('⚠️ Using cached route from localStorage');
-                    setRoute(JSON.parse(savedRoute));
-                }
+                // Don't use localStorage fallback if we want fresh data
+                console.log('⚠️ Not using localStorage cache to ensure fresh data');
             }
         };
 
@@ -114,6 +135,40 @@ function DriverPage() {
         const interval = setInterval(fetchOrders, 30000);
         return () => clearInterval(interval);
     }, [currentDriver]);
+
+    // Enrich route stops with addresses from orders when both are loaded
+    useEffect(() => {
+        if (!route || !orders || orders.length === 0) return;
+        
+        const hasAddresses = route.stops?.some(s => s.pickupAddress || s.deliveryAddress);
+        if (hasAddresses) {
+            console.log('✅ Route already has addresses');
+            return;
+        }
+        
+        console.log('🔧 Enriching route stops with order addresses...');
+        const enrichedStops = route.stops.map(stop => {
+            if (stop.type === 'depot') return stop;
+            
+            const order = orders.find(o => o.id === stop.orderId);
+            if (!order) {
+                console.warn(`Order ${stop.orderId} not found`);
+                return stop;
+            }
+            
+            return {
+                ...stop,
+                pickupAddress: order.pickupAddress || '',
+                deliveryAddress: order.deliveryAddress || ''
+            };
+        });
+        
+        setRoute({
+            ...route,
+            stops: enrichedStops
+        });
+        console.log('✅ Route stops enriched with addresses');
+    }, [orders, route?.vehicleId]);
 
     // Auto-refresh when tab becomes visible
     useEffect(() => {
@@ -185,11 +240,6 @@ function DriverPage() {
         };
     }, [currentDriver]);
 
-    const handleLogout = () => {
-        localStorage.removeItem('currentUser');
-        navigate('/login');
-    };
-
     const calculateTotalDistance = () => {
         return route?.distance || 0;
     };
@@ -202,7 +252,7 @@ function DriverPage() {
         return route?.assignedOrders?.length || 0;
     };
 
-    const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    const handleUpdateOrderStatus = async (orderId, newStatus, currentStop, isFinal) => {
         try {
             const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/status`, {
                 method: 'PATCH',
@@ -211,13 +261,25 @@ function DriverPage() {
             });
 
             if (response.ok) {
-                // Refresh orders
+                // Update vehicle position immediately after completing any stop
+                if (currentStop && isFinal) {
+                    setVehicleCurrentPosition(currentStop.point);
+                    console.log('🚗 Vehicle position updated to:', currentStop.type, 'location');
+                }
+                
+                // Mark this stop as completed
+                if (currentStop) {
+                    setLastCompletedStop(currentStop);
+                    console.log('📌 Marked stop as completed:', currentStop.type, 'Order:', currentStop.orderId);
+                }
+                
+                // Refresh orders to update next stop
                 const ordersRes = await fetch(`${API_BASE_URL}/api/orders?driverId=${currentDriver.vehicleId}`);
                 if (ordersRes.ok) {
                     const data = await ordersRes.json();
                     setOrders(data);
+                    console.log('✅ Order status updated to:', newStatus);
                 }
-                alert(`Đã cập nhật trạng thái đơn hàng #${orderId}`);
             } else {
                 alert('Có lỗi xảy ra khi cập nhật trạng thái');
             }
@@ -225,6 +287,39 @@ function DriverPage() {
             console.error('Error updating order status:', error);
             alert('Có lỗi xảy ra: ' + error.message);
         }
+    };
+
+    // Move to next location
+    const handleMoveToNextLocation = () => {
+        if (lastCompletedStop && lastCompletedStop.point) {
+            console.log('🚗 Moving vehicle from', vehicleCurrentPosition, 'to', lastCompletedStop.point);
+            setVehicleCurrentPosition(lastCompletedStop.point);
+            setLastCompletedStop(null);
+            console.log('✅ Vehicle position updated');
+        } else {
+            console.warn('⚠️ No completed stop to move to');
+        }
+    };
+
+    // Get next status for an order based on stop type and current status
+    const getNextStatusForStop = (stop, order) => {
+        if (!order) return null;
+        
+        const status = order.status;
+        
+        // For pickup stops
+        if (stop.type === 'pickup') {
+            if (status === 'assigned') return { status: 'in_transit', label: '🚗 Bắt đầu lấy hàng', isFinal: false };
+            if (status === 'in_transit') return { status: 'picked', label: '📦 Đã lấy hàng', isFinal: true };
+        }
+        
+        // For delivery stops
+        if (stop.type === 'delivery') {
+            if (status === 'picked') return { status: 'delivering', label: '🚚 Đang giao hàng', isFinal: false };
+            if (status === 'delivering') return { status: 'delivered', label: '✅ Hoàn thành', isFinal: true };
+        }
+        
+        return null;
     };
 
     const getStatusBadgeClass = (status) => {
@@ -274,71 +369,133 @@ function DriverPage() {
         return actions[status] || [];
     };
 
-    const sidebarItems = [
-        { name: 'Tuyến đường', icon: '🗺️', path: '/driver' },
-        { name: 'Đơn hàng', icon: '📦', path: '/driver/orders' },
-        { name: 'Đã giao', icon: '✅', path: '/driver/delivered' },
-        { name: 'Cài đặt', icon: '⚙️', path: '/driver/settings' }
-    ];
+    // Get next destination stop (first incomplete stop based on stop type and order status)
+    const getNextStop = () => {
+        if (!route?.stops || !orders) return null;
+        
+        // Filter out depot stops
+        const activeStops = route.stops.filter(s => s.type !== 'depot');
+        
+        for (const stop of activeStops) {
+            const order = orders.find(o => o.id === stop.orderId);
+            if (!order) continue;
+            
+            // Check if this stop is completed based on type and status
+            const isStopCompleted = 
+                (stop.type === 'pickup' && ['picked', 'delivering', 'delivered', 'cancelled'].includes(order.status)) ||
+                (stop.type === 'delivery' && ['delivered', 'cancelled'].includes(order.status));
+            
+            // If stop is not completed, this is the next stop
+            if (!isStopCompleted) {
+                console.log('🎯 Next stop found:', stop.type, 'Order:', stop.orderId, 'Status:', order.status);
+                return stop;
+            }
+        }
+        
+        return null;
+    };
+
+    // Fetch OSRM route to next stop when in 'next' mode
+    useEffect(() => {
+        const fetchNextStopRoute = async () => {
+            if (mapDisplayMode !== 'next') {
+                setNextStopRoute(null);
+                return;
+            }
+
+            const nextStop = getNextStop();
+            // Use current vehicle position or fallback to depot
+            const vehiclePos = vehicleCurrentPosition || 
+                              route?.stops?.find(s => s.type === 'depot')?.point || 
+                              route?.vehiclePosition;
+
+            if (!nextStop || !vehiclePos) {
+                setNextStopRoute(null);
+                return;
+            }
+
+            try {
+                // Format: lng,lat;lng,lat
+                const coords = `${vehiclePos[1]},${vehiclePos[0]};${nextStop.point[1]},${nextStop.point[0]}`;
+                const url = `http://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.code === 'Ok' && data.routes?.[0]) {
+                    // Convert from [lng, lat] to [lat, lng] for Leaflet
+                    const routePath = data.routes[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    setNextStopRoute(routePath);
+                    console.log('✅ Fetched OSRM route to next stop:', routePath.length, 'points');
+                } else {
+                    console.warn('⚠️ OSRM failed, using straight line');
+                    setNextStopRoute(null);
+                }
+            } catch (error) {
+                console.error('Error fetching OSRM route:', error);
+                setNextStopRoute(null);
+            }
+        };
+
+        fetchNextStopRoute();
+    }, [mapDisplayMode, route?.vehicleId, orders, vehicleCurrentPosition]);
 
     return (
-        <div className="modern-dashboard">
-            {/* Sidebar */}
-            <div className="sidebar">
-                <div className="sidebar-header">
-                    <div className="logo">
-                        <span className="logo-icon">🚚</span>
-                        <span className="logo-text">Tài Xế</span>
-                    </div>
-                </div>
-                
-                <nav className="sidebar-nav">
-                    {sidebarItems.map((item, index) => (
-                        <div 
-                            key={index}
-                            className={`nav-item ${window.location.pathname === item.path ? 'active' : ''}`}
-                            onClick={() => navigate(item.path)}
-                        >
-                            <span className="nav-icon">{item.icon}</span>
-                            <span className="nav-text">{item.name}</span>
-                        </div>
-                    ))}
-                </nav>
-
-                <div className="sidebar-footer">
-                    <div className="footer-user">
-                        <div className="user-avatar">👤</div>
-                        <div className="user-info">
-                            <div className="user-name">{currentDriver?.username || 'Tài xế'}</div>
-                            <div className="user-role">Driver</div>
-                        </div>
-                    </div>
-                    <button onClick={handleLogout} className="logout-btn-full">
-                        <span>🚪</span> Đăng xuất
-                    </button>
-                </div>
-            </div>
-
-            {/* Main Content */}
-            <div className="main-content">
+        <div className="main-content">
                 {/* Top Header */}
                 <div className="top-header">
                     <div className="header-left">
                         <h1>Tuyến đường của tôi</h1>
                         <p>Xem chi tiết lộ trình và các điểm giao hàng</p>
                     </div>
-                    <div className="header-right">
+                    <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {/* Map Display Mode Toggle */}
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <button 
+                                onClick={() => setMapDisplayMode('full')}
+                                style={{
+                                    padding: '10px 20px',
+                                    background: mapDisplayMode === 'full' ? '#3b82f6' : '#e5e7eb',
+                                    color: mapDisplayMode === 'full' ? 'white' : '#6b7280',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontSize: '14px',
+                                    fontWeight: '500',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                🗺️ Toàn bộ
+                            </button>
+                            <button 
+                                onClick={() => setMapDisplayMode('next')}
+                                style={{
+                                    padding: '10px 20px',
+                                    background: mapDisplayMode === 'next' ? '#3b82f6' : '#e5e7eb',
+                                    color: mapDisplayMode === 'next' ? 'white' : '#6b7280',
+                                    border: 'none',
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    fontSize: '14px',
+                                    fontWeight: '500',
+                                    transition: 'all 0.2s'
+                                }}
+                            >
+                                📍 Điểm kế tiếp
+                            </button>
+                        </div>
                         <button 
                             onClick={() => window.location.reload()}
                             style={{
-                                padding: '8px 16px',
-                                marginRight: '10px',
+                                padding: '10px 20px',
                                 background: '#3b82f6',
                                 color: 'white',
                                 border: 'none',
-                                borderRadius: '6px',
+                                borderRadius: '8px',
                                 cursor: 'pointer',
-                                fontSize: '14px'
+                                fontSize: '14px',
+                                fontWeight: '500',
+                                transition: 'all 0.2s'
                             }}
                         >
                             🔄 Kiểm tra lại
@@ -362,16 +519,128 @@ function DriverPage() {
                                 <p>Tài khoản của bạn chưa được gán xe</p>
                             </div>
                         ) : route ? (
-                            <MapContainer
-                                center={currentPosition?.position || route.stops?.[0]?.point || HANOI_CENTER}
-                                zoom={13}
-                                style={{ height: '100%', width: '100%', borderRadius: '12px' }}
-                            >
-                                <MapController center={mapCenter} />
-                                <TileLayer
-                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                                />
+                            (() => {
+                                const nextStop = getNextStop();
+                                const depotStop = route.stops?.find(s => s.type === 'depot');
+                                const vehiclePos = vehicleCurrentPosition || depotStop?.point || route.vehiclePosition;
+                                
+                                // For 'next' mode: show only vehicle and next stop with direct route
+                                if (mapDisplayMode === 'next' && nextStop && vehiclePos) {
+                                    return (
+                                        <MapContainer
+                                            center={nextStop.point}
+                                            zoom={14}
+                                            style={{ height: '100%', width: '100%', borderRadius: '12px' }}
+                                        >
+                                            <MapController center={mapCenter} />
+                                            <TileLayer
+                                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                                            />
+
+                                            {/* Vehicle position */}
+                                            <Marker position={vehiclePos} icon={vehicleIcon}>
+                                                <Popup>
+                                                    <div style={{minWidth: '200px'}}>
+                                                        <strong style={{fontSize: '14px', color: '#111827'}}>🚚 Vị trí xe</strong>
+                                                        <div style={{marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e5e7eb'}}>
+                                                            <div><strong>Xe:</strong> #{route.vehicleId}</div>
+                                                        </div>
+                                                    </div>
+                                                </Popup>
+                                            </Marker>
+
+                                            {/* Next stop marker */}
+                                            <Marker 
+                                                position={nextStop.point} 
+                                                icon={nextStop.type === 'pickup' ? pickupIcon : deliveryIcon}
+                                            >
+                                                <Popup>
+                                                    <div style={{minWidth: '250px'}}>
+                                                        <strong style={{fontSize: '14px', color: '#111827'}}>
+                                                            📍 Điểm kế tiếp: {nextStop.type === 'pickup' ? '📦 Lấy hàng' : '🎯 Giao hàng'}
+                                                        </strong>
+                                                        <div style={{marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e5e7eb'}}>
+                                                            <div style={{marginBottom: '6px'}}>
+                                                                <strong>Đơn hàng:</strong> #{nextStop.orderId}
+                                                            </div>
+                                                            {nextStop.weight && (
+                                                                <div style={{marginBottom: '6px'}}>
+                                                                    <strong>Khối lượng:</strong> ⚖️ {nextStop.weight}kg
+                                                                </div>
+                                                            )}
+                                                            {nextStop.type === 'pickup' && nextStop.pickupAddress && (
+                                                                <div style={{marginTop: '8px', padding: '8px', background: '#eff6ff', borderRadius: '4px', fontSize: '12px'}}>
+                                                                    <strong>📍 Địa chỉ:</strong><br/>
+                                                                    {nextStop.pickupAddress}
+                                                                </div>
+                                                            )}
+                                                            {nextStop.type === 'delivery' && nextStop.deliveryAddress && (
+                                                                <div style={{marginTop: '8px', padding: '8px', background: '#f0fdf4', borderRadius: '4px', fontSize: '12px'}}>
+                                                                    <strong>📍 Địa chỉ:</strong><br/>
+                                                                    {nextStop.deliveryAddress}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </Popup>
+                                            </Marker>
+
+                                            {/* Route line to next stop - OSRM or straight line */}
+                                            {nextStopRoute ? (
+                                                <Polyline
+                                                    positions={nextStopRoute}
+                                                    color="#ef4444"
+                                                    weight={5}
+                                                    opacity={0.8}
+                                                />
+                                            ) : (
+                                                <Polyline
+                                                    positions={[vehiclePos, nextStop.point]}
+                                                    color="#ef4444"
+                                                    weight={4}
+                                                    opacity={0.6}
+                                                    dashArray="10, 10"
+                                                />
+                                            )}
+                                        </MapContainer>
+                                    );
+                                }
+
+                                // Full mode: show all stops and full route
+                                return (
+                                    <MapContainer
+                                        center={currentPosition?.position || route.stops?.[0]?.point || HANOI_CENTER}
+                                        zoom={13}
+                                        style={{ height: '100%', width: '100%', borderRadius: '12px' }}
+                                    >
+                                        <MapController center={mapCenter} />
+                                        <TileLayer
+                                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                                        />
+
+                                        {/* Depot/Vehicle starting position */}
+                                        {vehiclePos && (
+                                            <Marker position={vehiclePos} icon={vehicleIcon}>
+                                                <Popup>
+                                                    <div style={{minWidth: '200px'}}>
+                                                        <strong style={{fontSize: '14px', color: '#111827'}}>🚚 Điểm xuất phát</strong>
+                                                        <div style={{marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e5e7eb'}}>
+                                                            <div style={{marginBottom: '6px'}}>
+                                                                <strong>Xe:</strong> #{route.vehicleId}
+                                                            </div>
+                                                            {depotStop?.address && (
+                                                                <div style={{marginTop: '8px', padding: '8px', background: '#fef3c7', borderRadius: '4px', fontSize: '12px'}}>
+                                                                    <strong>📍 Địa chỉ:</strong><br/>
+                                                                    {depotStop.address}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </Popup>
+                                            </Marker>
+                                        )}
 
                                 {/* Current vehicle position */}
                                 {currentPosition?.position && (
@@ -460,6 +729,13 @@ function DriverPage() {
                                                                 {stop.deliveryAddress}
                                                             </div>
                                                         )}
+                                                        {/* Fallback: show address field if specific address not available */}
+                                                        {!stop.pickupAddress && !stop.deliveryAddress && stop.address && (
+                                                            <div style={{marginTop: '8px', padding: '8px', background: '#f3f4f6', borderRadius: '4px', fontSize: '12px'}}>
+                                                                <strong>📍 Địa chỉ:</strong><br/>
+                                                                {stop.address}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </Popup>
@@ -467,6 +743,8 @@ function DriverPage() {
                                     );
                                 })}
                             </MapContainer>
+                                );
+                            })()
                         ) : (
                             <div className="empty-state">
                                 <div className="empty-icon">🗺️</div>
@@ -518,34 +796,187 @@ function DriverPage() {
 
                     {/* Sidebar Info Panel */}
                     <div className="control-panel">
-                        {/* Stats Cards */}
-                        {route && (
-                            <div className="panel-section">
-                                <h3 className="section-title">📊 Thống kê</h3>
-                                <div className="stats-compact">
-                                    <div className="stat-item">
-                                        <span className="stat-label">Điểm dừng</span>
-                                        <span className="stat-value">{route.stops?.length || 0}</span>
-                                    </div>
-                                    <div className="stat-item">
-                                        <span className="stat-label">Khoảng cách</span>
-                                        <span className="stat-value">{calculateTotalDistance().toFixed(1)} km</span>
-                                    </div>
-                                    <div className="stat-item">
-                                        <span className="stat-label">Thời gian</span>
-                                        <span className="stat-value">{Math.round(calculateTotalTime())} phút</span>
-                                    </div>
-                                    <div className="stat-item">
-                                        <span className="stat-label">Đơn hàng</span>
-                                        <span className="stat-value">{getTotalOrders()}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        {mapDisplayMode === 'next' ? (
+                            /* Next Stop Mode - Show only next destination */
+                            (() => {
+                                const nextStop = getNextStop();
+                                if (!nextStop) {
+                                    return (
+                                        <div className="panel-section">
+                                            <h3 className="section-title">✅ Hoàn thành</h3>
+                                            <div style={{ padding: '20px', textAlign: 'center' }}>
+                                                <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎉</div>
+                                                <p style={{ fontSize: '16px', fontWeight: '600', marginBottom: '8px' }}>
+                                                    Đã hoàn thành tất cả điểm dừng
+                                                </p>
+                                                <p style={{ fontSize: '14px', color: '#6b7280' }}>
+                                                    Chuyển sang chế độ "Toàn bộ" để xem lại tuyến đường
+                                                </p>
+                                            </div>
+                                        </div>
+                                    );
+                                }
 
-                        {/* Stops Timeline */}
-                        <div className="panel-section">
-                            <h3 className="section-title">📍 Điểm dừng ({route?.stops?.filter(s => s.type !== 'depot').length || 0})</h3>
+                                const order = orders.find(o => o.id === nextStop.orderId);
+                                const nextAction = getNextStatusForStop(nextStop, order);
+                                
+                                // Debug logging
+                                console.log('🔍 Next Stop Panel:', {
+                                    nextStop: { orderId: nextStop.orderId, type: nextStop.type },
+                                    lastCompleted: lastCompletedStop ? { orderId: lastCompletedStop.orderId, type: lastCompletedStop.type } : null,
+                                    orderStatus: order?.status,
+                                    nextAction: nextAction?.label,
+                                    shouldShowMoveButton: lastCompletedStop && 
+                                                          lastCompletedStop.orderId === nextStop.orderId && 
+                                                          lastCompletedStop.type === nextStop.type
+                                });
+                                
+                                return (
+                                    <div className="panel-section">
+                                        <h3 className="section-title">📍 Điểm đến kế tiếp</h3>
+                                        <div style={{ padding: '16px', background: '#f9fafb', borderRadius: '12px', border: '2px solid #3b82f6' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                                                <div style={{ 
+                                                    width: '48px', 
+                                                    height: '48px', 
+                                                    borderRadius: '50%', 
+                                                    background: nextStop.type === 'pickup' ? '#dbeafe' : '#dcfce7',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    fontSize: '24px'
+                                                }}>
+                                                    {nextStop.type === 'pickup' ? '📦' : '🎯'}
+                                                </div>
+                                                <div style={{ flex: 1 }}>
+                                                    <div style={{ fontSize: '16px', fontWeight: '600', marginBottom: '4px' }}>
+                                                        {nextStop.type === 'pickup' ? 'Lấy hàng' : 'Giao hàng'}
+                                                    </div>
+                                                    <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                                                        Đơn hàng #{nextStop.orderId}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Address */}
+                                            <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: '8px' }}>
+                                                <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px', fontWeight: '600' }}>
+                                                    📍 ĐỊA CHỈ
+                                                </div>
+                                                <div style={{ fontSize: '14px', lineHeight: '1.5' }}>
+                                                    {nextStop.type === 'pickup' 
+                                                        ? (nextStop.pickupAddress || 'Chưa có địa chỉ')
+                                                        : (nextStop.deliveryAddress || 'Chưa có địa chỉ')
+                                                    }
+                                                </div>
+                                            </div>
+
+                                            {/* Weight */}
+                                            {nextStop.weight && (
+                                                <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: '8px' }}>
+                                                    <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px', fontWeight: '600' }}>
+                                                        ⚖️ KHỐI LƯỢNG
+                                                    </div>
+                                                    <div style={{ fontSize: '18px', fontWeight: '600' }}>
+                                                        {nextStop.weight} kg
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Order Status */}
+                                            {order && (
+                                                <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: '8px' }}>
+                                                    <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px', fontWeight: '600' }}>
+                                                        📊 TRẠNG THÁI
+                                                    </div>
+                                                    <span className={`status-badge ${getStatusBadgeClass(order.status)}`}>
+                                                        {getStatusLabel(order.status)}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {/* Action Buttons */}
+                                            {lastCompletedStop && 
+                                             lastCompletedStop.orderId === nextStop.orderId && 
+                                             lastCompletedStop.type === nextStop.type &&
+                                             nextAction?.isFinal ? (
+                                                /* Show "Move to Next Location" only after final status update for this stop type */
+                                                <button
+                                                    onClick={handleMoveToNextLocation}
+                                                    style={{
+                                                        width: '100%',
+                                                        padding: '14px',
+                                                        background: '#10b981',
+                                                        color: 'white',
+                                                        border: 'none',
+                                                        borderRadius: '8px',
+                                                        fontSize: '15px',
+                                                        fontWeight: '600',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    onMouseOver={e => e.target.style.background = '#059669'}
+                                                    onMouseOut={e => e.target.style.background = '#10b981'}
+                                                >
+                                                    🚗 Đến Điểm Tiếp Theo
+                                                </button>
+                                            ) : nextAction ? (
+                                                /* Show status update button */
+                                                <button
+                                                    onClick={() => handleUpdateOrderStatus(nextStop.orderId, nextAction.status, nextStop, nextAction.isFinal)}
+                                                    style={{
+                                                        width: '100%',
+                                                        padding: '14px',
+                                                        background: '#3b82f6',
+                                                        color: 'white',
+                                                        border: 'none',
+                                                        borderRadius: '8px',
+                                                        fontSize: '15px',
+                                                        fontWeight: '600',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s'
+                                                    }}
+                                                    onMouseOver={e => e.target.style.background = '#2563eb'}
+                                                    onMouseOut={e => e.target.style.background = '#3b82f6'}
+                                                >
+                                                    {nextAction.label}
+                                                </button>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                );
+                            })()
+                        ) : (
+                            /* Full Mode - Show stats and all stops */
+                            <>
+                                {/* Stats Cards */}
+                                {route && (
+                                    <div className="panel-section">
+                                        <h3 className="section-title">📊 Thống kê</h3>
+                                        <div className="stats-compact">
+                                            <div className="stat-item">
+                                                <span className="stat-label">Điểm dừng</span>
+                                                <span className="stat-value">{route.stops?.length || 0}</span>
+                                            </div>
+                                            <div className="stat-item">
+                                                <span className="stat-label">Khoảng cách</span>
+                                                <span className="stat-value">{calculateTotalDistance().toFixed(1)} km</span>
+                                            </div>
+                                            <div className="stat-item">
+                                                <span className="stat-label">Thời gian</span>
+                                                <span className="stat-value">{Math.round(calculateTotalTime())} phút</span>
+                                            </div>
+                                            <div className="stat-item">
+                                                <span className="stat-label">Đơn hàng</span>
+                                                <span className="stat-value">{getTotalOrders()}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Stops Timeline */}
+                                <div className="panel-section">
+                                    <h3 className="section-title">📍 Điểm dừng ({route?.stops?.filter(s => s.type !== 'depot').length || 0})</h3>
                             {route?.stops && route.stops.length > 0 ? (
                                 <div className="stops-list">
                                     {route.stops.filter(stop => stop.type !== 'depot').map((stop, index) => {
@@ -573,6 +1004,7 @@ function DriverPage() {
                                                         </span>
                                                         <span className="order-chip">Đơn #{stop.orderId}</span>
                                                     </div>
+                                                    {/* Display address based on stop type */}
                                                     {stop.type === 'pickup' && stop.pickupAddress && (
                                                         <div className="stop-address" title={stop.pickupAddress}>
                                                             📍 {stop.pickupAddress}
@@ -581,6 +1013,12 @@ function DriverPage() {
                                                     {stop.type === 'delivery' && stop.deliveryAddress && (
                                                         <div className="stop-address" title={stop.deliveryAddress}>
                                                             📍 {stop.deliveryAddress}
+                                                        </div>
+                                                    )}
+                                                    {/* Fallback to address field if specific address not available */}
+                                                    {!stop.pickupAddress && !stop.deliveryAddress && stop.address && (
+                                                        <div className="stop-address" title={stop.address}>
+                                                            📍 {stop.address}
                                                         </div>
                                                     )}
                                                     <div className="stop-meta">
@@ -598,9 +1036,9 @@ function DriverPage() {
                                     <p>Chưa có điểm dừng nào</p>
                                 </div>
                             )}
-                        </div>
+                                </div>
 
-                        {/* Selected Stop Details */}
+                                {/* Selected Stop Details */}
                         {selectedStop && (
                             <div className="panel-section">
                                 <h3 className="section-title">📦 Chi tiết điểm dừng</h3>
@@ -661,10 +1099,11 @@ function DriverPage() {
                                 </div>
                             </div>
                         )}
+                            </>
+                        )}
                     </div>
                 </div>
             </div>
-        </div>
     );
 }
 
