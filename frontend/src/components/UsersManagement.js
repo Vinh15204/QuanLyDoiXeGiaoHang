@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/ModernDashboard.css';
+import BulkActionToolbar from './BulkActionToolbar';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
@@ -18,6 +19,9 @@ function UsersManagement() {
     const [isEditMode, setIsEditMode] = useState(false);
     const [filterRole, setFilterRole] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedUsers, setSelectedUsers] = useState([]);
+    const [selectAll, setSelectAll] = useState(false);
+    const [showBulkRoleModal, setShowBulkRoleModal] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
         username: '',
@@ -27,6 +31,41 @@ function UsersManagement() {
         role: 'user',
         currentLocation: [21.0285, 105.8542]
     });
+
+    // Sorting states
+    const [sortBy, setSortBy] = useState(null);
+    const [sortOrder, setSortOrder] = useState('asc');
+
+    const handleSort = (field) => {
+        if (sortBy === field) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(field);
+            setSortOrder('asc');
+        }
+    };
+
+    const getSortedUsers = (usersList) => {
+        if (!sortBy) return usersList;
+        
+        return [...usersList].sort((a, b) => {
+            let aVal = a[sortBy];
+            let bVal = b[sortBy];
+            
+            // Handle null/undefined values
+            if (aVal == null) return 1;
+            if (bVal == null) return -1;
+            
+            // Numeric comparison
+            if (typeof aVal === 'number' && typeof bVal === 'number') {
+                return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+            }
+            
+            // String comparison
+            const comparison = String(aVal).localeCompare(String(bVal));
+            return sortOrder === 'asc' ? comparison : -comparison;
+        });
+    };
 
     useEffect(() => {
         if (!currentUser || currentUser.role !== 'admin') {
@@ -173,6 +212,67 @@ function UsersManagement() {
         }));
     };
 
+    const handleSelectAll = (e) => {
+        const checked = e.target.checked;
+        setSelectAll(checked);
+        if (checked) {
+            setSelectedUsers(filteredUsers.map(u => u._id));
+        } else {
+            setSelectedUsers([]);
+        }
+    };
+
+    const handleSelectUser = (userId) => {
+        setSelectedUsers(prev => {
+            if (prev.includes(userId)) {
+                return prev.filter(id => id !== userId);
+            } else {
+                return [...prev, userId];
+            }
+        });
+    };
+
+    const handleViewUser = (user) => {
+        setIsEditMode(false);
+        setSelectedUser(user);
+        setFormData({
+            name: user.name || '',
+            username: user.username || '',
+            email: user.email || '',
+            phone: user.phone || '',
+            password: '',
+            role: user.role || 'user',
+            currentLocation: user.currentLocation || [21.0285, 105.8542]
+        });
+        setShowModal(true);
+    };
+
+    const handleBulkRoleChange = async (newRole) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/users/bulk-role`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ids: selectedUsers,
+                    role: newRole
+                })
+            });
+            
+            if (response.ok) {
+                alert(`Đã cập nhật vai trò thành công cho ${selectedUsers.length} người dùng!`);
+                setShowBulkRoleModal(false);
+                setSelectedUsers([]);
+                setSelectAll(false);
+                fetchUsers();
+            } else {
+                alert('Lỗi khi cập nhật vai trò!');
+            }
+        } catch (error) {
+            console.error('Error updating roles:', error);
+            alert('Lỗi khi cập nhật vai trò!');
+        }
+    };
+
     const getRoleBadgeClass = (role) => {
         switch (role) {
             case 'admin': return 'badge-admin';
@@ -197,7 +297,8 @@ function UsersManagement() {
         const matchesSearch = !searchTerm || 
             user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             user.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            user.email?.toLowerCase().includes(searchTerm.toLowerCase());
+            user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            user.phone?.toLowerCase().includes(searchTerm.toLowerCase());
         return matchesRole && matchesSearch;
     });
 
@@ -275,7 +376,7 @@ function UsersManagement() {
                         <input
                             type="text"
                             className="search-input"
-                            placeholder="Tìm kiếm theo tên, username, email..."
+                            placeholder="Tìm kiếm theo tên, username, email, số điện thoại..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -289,27 +390,65 @@ function UsersManagement() {
 
             {/* Users Table */}
             <div className="table-container">
+                {/* Bulk Action Toolbar */}
+                {selectedUsers.length > 0 && (
+                    <BulkActionToolbar
+                        selectedCount={selectedUsers.length}
+                        onClear={() => {
+                            setSelectedUsers([]);
+                            setSelectAll(false);
+                        }}
+                        onChangeRole={() => setShowBulkRoleModal(true)}
+                        hideDelete={true}
+                        hideAssignDriver={true}
+                        hideChangeStatus={true}
+                    />
+                )}
+
                 <table className="data-table">
                     <thead>
                         <tr>
-                            <th>ID</th>
-                            <th>Tên</th>
-                            <th>Username</th>
-                            <th>Email</th>
-                            <th>Số điện thoại</th>
-                            <th>Vai trò</th>
-                            <th>Hành động</th>
+                            <th style={{width: '50px'}}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={selectAll}
+                                    onChange={handleSelectAll}
+                                />
+                            </th>
+                            <th onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                USER ID {sortBy === 'id' && (sortOrder === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('name')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                TÊN {sortBy === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('username')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                USERNAME {sortBy === 'username' && (sortOrder === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('email')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                EMAIL {sortBy === 'email' && (sortOrder === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('phone')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                SỐ ĐIỆN THOẠI {sortBy === 'phone' && (sortOrder === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th onClick={() => handleSort('role')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                VAI TRÒ {sortBy === 'role' && (sortOrder === 'asc' ? '↑' : '↓')}
+                            </th>
+                            <th>ACTIONS</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredUsers.map(user => (
+                        {getSortedUsers(filteredUsers).map(user => (
                             <tr key={user._id || user.username || `${user.id}-${user.role}`}>
+                                <td>
+                                    <input 
+                                        type="checkbox"
+                                        checked={selectedUsers.includes(user._id)}
+                                        onChange={() => handleSelectUser(user._id)}
+                                    />
+                                </td>
                                 <td>#{user.id}</td>
                                 <td>
-                                    <div className="user-cell">
-                                        <div className="user-avatar-small">{user.name?.charAt(0) || '?'}</div>
-                                        <strong>{user.name}</strong>
-                                    </div>
+                                    <strong>{user.name}</strong>
                                 </td>
                                 <td>{user.username}</td>
                                 <td>{user.email || 'Chưa cập nhật'}</td>
@@ -322,19 +461,18 @@ function UsersManagement() {
                                 <td>
                                     <div className="action-buttons">
                                         <button 
-                                            className="btn-icon-action edit"
+                                            className="btn-small"
+                                            onClick={() => handleViewUser(user)}
+                                            title="Xem chi tiết"
+                                        >
+                                            VIEW
+                                        </button>
+                                        <button 
+                                            className="btn-small-outline"
                                             onClick={() => handleEditUser(user)}
                                             title="Chỉnh sửa"
                                         >
-                                            ✏️
-                                        </button>
-                                        <button 
-                                            className="btn-icon-action delete"
-                                            onClick={() => handleDeleteUser(user.id)}
-                                            title="Xóa"
-                                            disabled={user.id === currentUser.id}
-                                        >
-                                            🗑️
+                                            EDIT
                                         </button>
                                     </div>
                                 </td>
@@ -355,7 +493,7 @@ function UsersManagement() {
                 <div className="modal-overlay" onClick={() => setShowModal(false)}>
                     <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h2>{isEditMode ? 'Chỉnh sửa người dùng' : 'Thêm người dùng mới'}</h2>
+                            <h2>{isEditMode ? 'Chỉnh sửa người dùng' : selectedUser ? 'Thông tin người dùng' : 'Thêm người dùng mới'}</h2>
                             <button className="modal-close" onClick={() => setShowModal(false)}>×</button>
                         </div>
                         
@@ -370,6 +508,7 @@ function UsersManagement() {
                                         onChange={handleInputChange}
                                         required
                                         placeholder="Nhập tên đầy đủ"
+                                        disabled={!isEditMode && selectedUser}
                                     />
                                 </div>
 
@@ -382,7 +521,7 @@ function UsersManagement() {
                                         onChange={handleInputChange}
                                         required
                                         placeholder="Nhập username"
-                                        disabled={isEditMode}
+                                        disabled={isEditMode || selectedUser}
                                     />
                                 </div>
 
@@ -395,6 +534,7 @@ function UsersManagement() {
                                             value={formData.email}
                                             onChange={handleInputChange}
                                             placeholder="email@example.com"
+                                            disabled={!isEditMode && selectedUser}
                                         />
                                     </div>
 
@@ -406,6 +546,7 @@ function UsersManagement() {
                                             value={formData.phone}
                                             onChange={handleInputChange}
                                             placeholder="0123456789"
+                                            disabled={!isEditMode && selectedUser}
                                         />
                                     </div>
                                 </div>
@@ -418,6 +559,7 @@ function UsersManagement() {
                                             value={formData.role}
                                             onChange={handleInputChange}
                                             required
+                                            disabled={!isEditMode && selectedUser}
                                         >
                                             <option value="user">Người dùng</option>
                                             <option value="driver">Tài xế</option>
@@ -427,30 +569,80 @@ function UsersManagement() {
 
                                     <div className="form-group">
                                         <label>
-                                            {isEditMode ? 'Mật khẩu mới (để trống nếu không đổi)' : 'Mật khẩu'} 
-                                            {!isEditMode && <span className="required">*</span>}
+                                            {isEditMode ? 'Mật khẩu mới (để trống nếu không đổi)' : selectedUser ? 'Mật khẩu' : 'Mật khẩu'} 
+                                            {!isEditMode && !selectedUser && <span className="required">*</span>}
                                         </label>
                                         <input
                                             type="password"
                                             name="password"
                                             value={formData.password}
                                             onChange={handleInputChange}
-                                            required={!isEditMode}
-                                            placeholder={isEditMode ? "Để trống nếu không đổi" : "Nhập mật khẩu"}
+                                            required={!isEditMode && !selectedUser}
+                                            placeholder={isEditMode ? "Để trống nếu không đổi" : selectedUser ? "********" : "Nhập mật khẩu"}
+                                            disabled={!isEditMode && selectedUser}
                                         />
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="modal-footer">
-                                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
-                                    Hủy
-                                </button>
-                                <button type="submit" className="btn-primary">
-                                    {isEditMode ? 'Cập nhật' : 'Thêm mới'}
-                                </button>
-                            </div>
+                            {(isEditMode || !selectedUser) && (
+                                <div className="modal-footer">
+                                    <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
+                                        Hủy
+                                    </button>
+                                    <button type="submit" className="btn-primary">
+                                        {isEditMode ? 'Cập nhật' : 'Thêm mới'}
+                                    </button>
+                                </div>
+                            )}
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Bulk Role Change Modal */}
+            {showBulkRoleModal && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <div className="modal-header">
+                            <h3>Đổi vai trò cho người dùng</h3>
+                            <button className="close-btn" onClick={() => setShowBulkRoleModal(false)}>✕</button>
+                        </div>
+                        <div className="modal-body">
+                            <p>Chọn vai trò mới cho <strong>{selectedUsers.length}</strong> người dùng đã chọn:</p>
+                            <div className="form-group">
+                                <label>Vai trò mới</label>
+                                <select 
+                                    id="bulk-role-select"
+                                    className="form-control"
+                                    defaultValue=""
+                                >
+                                    <option value="" disabled>Chọn vai trò...</option>
+                                    <option value="user">Người dùng</option>
+                                    <option value="driver">Tài xế</option>
+                                    <option value="admin">Quản trị viên</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="cancel-btn" onClick={() => setShowBulkRoleModal(false)}>
+                                Hủy
+                            </button>
+                            <button 
+                                className="save-btn" 
+                                onClick={() => {
+                                    const select = document.getElementById('bulk-role-select');
+                                    const newRole = select.value;
+                                    if (newRole) {
+                                        handleBulkRoleChange(newRole);
+                                    } else {
+                                        alert('Vui lòng chọn vai trò!');
+                                    }
+                                }}
+                            >
+                                Xác nhận
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

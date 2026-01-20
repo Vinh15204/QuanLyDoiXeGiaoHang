@@ -49,7 +49,7 @@ function CreateOrder() {
         deliveryAddress: '',
         pickup: null,  // [lat, lng]
         delivery: null,  // [lat, lng]
-        receiverId: '',  // ID người nhận
+        receiverPhone: '',  // Số điện thoại người nhận
         weight: '',
         notes: ''
     });
@@ -152,6 +152,55 @@ function CreateOrder() {
         }
     };
 
+    // Tìm hoặc tạo user theo số điện thoại
+    const findOrCreateReceiverByPhone = async (phone) => {
+        try {
+            // Tìm user theo số điện thoại
+            const response = await fetch(`${API_BASE_URL}/api/users`);
+            if (!response.ok) throw new Error('Không thể lấy danh sách người dùng');
+            
+            const users = await response.json();
+            const existingUser = users.find(u => u.phone === phone);
+            
+            if (existingUser) {
+                console.log('Đã tìm thấy user:', existingUser);
+                return existingUser.id;
+            }
+            
+            // Nếu không tìm thấy, tạo guest user mới
+            console.log('Tạo guest user mới cho sđt:', phone);
+            
+            // Tạo ID mới (lấy ID lớn nhất hiện tại + 1)
+            const maxId = users.reduce((max, u) => Math.max(max, u.id || 0), 0);
+            const newId = maxId + 1;
+            
+            const createResponse = await fetch(`${API_BASE_URL}/api/users`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    id: newId,
+                    username: `guest_${phone}`,
+                    name: `Guest ${phone.slice(-4)}`,
+                    email: `guest_${phone}@temp.com`,
+                    phone: phone,
+                    password: 'temp123',
+                    role: 'user'
+                })
+            });
+            
+            if (!createResponse.ok) throw new Error('Không thể tạo người dùng mới');
+            
+            const newUser = await createResponse.json();
+            console.log('Đã tạo guest user:', newUser);
+            return newUser.id;
+        } catch (error) {
+            console.error('Lỗi khi tìm/tạo user:', error);
+            throw error;
+        }
+    };
+
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({
@@ -163,8 +212,15 @@ function CreateOrder() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        if (!formData.receiverId || !formData.pickupAddress || !formData.deliveryAddress || !formData.weight) {
+        if (!formData.receiverPhone || !formData.pickupAddress || !formData.deliveryAddress || !formData.weight) {
             setMessage({ type: 'error', text: 'Vui lòng điền đầy đủ thông tin bắt buộc' });
+            return;
+        }
+
+        // Validate số điện thoại
+        const phoneRegex = /^[0-9]{10,11}$/;
+        if (!phoneRegex.test(formData.receiverPhone)) {
+            setMessage({ type: 'error', text: 'Số điện thoại không hợp lệ (10-11 số)' });
             return;
         }
 
@@ -177,6 +233,9 @@ function CreateOrder() {
         setMessage({ type: '', text: '' });
 
         try {
+            // Tìm hoặc tạo receiver
+            const receiverId = await findOrCreateReceiverByPhone(formData.receiverPhone);
+            
             const response = await fetch(`${API_BASE_URL}/api/orders`, {
                 method: 'POST',
                 headers: {
@@ -184,7 +243,7 @@ function CreateOrder() {
                 },
                 body: JSON.stringify({
                     senderId: currentUser.id,
-                    receiverId: parseInt(formData.receiverId),
+                    receiverId: receiverId,
                     pickupAddress: formData.pickupAddress,
                     deliveryAddress: formData.deliveryAddress,
                     pickup: formData.pickup,
@@ -203,7 +262,7 @@ function CreateOrder() {
                     deliveryAddress: '',
                     pickup: null,
                     delivery: null,
-                    receiverId: '',
+                    receiverPhone: '',
                     weight: '',
                     notes: ''
                 });
@@ -267,34 +326,80 @@ function CreateOrder() {
                                     value={formData.pickupAddress}
                                     onChange={handleChange}
                                     placeholder="Nhập địa chỉ lấy hàng để tìm kiếm..."
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            if (formData.pickupAddress && formData.pickupAddress.length >= 3) {
+                                                searchAddress(formData.pickupAddress, 'pickup');
+                                            }
+                                        }
+                                    }}
                                     style={{
                                         width: '100%',
                                         padding: '12px',
-                                        paddingRight: '100px',
+                                        paddingRight: '84px',
                                         border: '1px solid #ddd',
                                         borderRadius: '8px',
                                         fontSize: '14px'
                                     }}
                                 />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPickupMap(!showPickupMap)}
-                                    style={{
-                                        position: 'absolute',
-                                        right: '8px',
-                                        top: '50%',
-                                        transform: 'translateY(-50%)',
-                                        padding: '6px 12px',
-                                        background: '#3b82f6',
-                                        color: 'white',
-                                        border: 'none',
-                                        borderRadius: '6px',
-                                        cursor: 'pointer',
-                                        fontSize: '12px'
-                                    }}
-                                >
-                                    🗺️ Bản đồ
-                                </button>
+                                <div style={{
+                                    position: 'absolute',
+                                    right: '8px',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    display: 'flex',
+                                    gap: '4px'
+                                }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (formData.pickupAddress && formData.pickupAddress.length >= 3) {
+                                                setPickupSearching(true);
+                                                searchAddress(formData.pickupAddress, 'pickup');
+                                            }
+                                        }}
+                                        disabled={!formData.pickupAddress || formData.pickupAddress.length < 3}
+                                        title="Tìm kiếm địa chỉ"
+                                        style={{
+                                            width: '36px',
+                                            height: '36px',
+                                            padding: '0',
+                                            background: formData.pickupAddress && formData.pickupAddress.length >= 3 ? '#10b981' : '#e5e7eb',
+                                            color: formData.pickupAddress && formData.pickupAddress.length >= 3 ? 'white' : '#9ca3af',
+                                            border: 'none',
+                                            borderRadius: '6px',
+                                            cursor: formData.pickupAddress && formData.pickupAddress.length >= 3 ? 'pointer' : 'not-allowed',
+                                            fontSize: '16px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                    >
+                                        🔍
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPickupMap(!showPickupMap)}
+                                        title="Chọn trên bản đồ"
+                                        style={{
+                                            width: '36px',
+                                            height: '36px',
+                                            padding: '0',
+                                            background: showPickupMap ? '#3b82f6' : '#e5e7eb',
+                                            color: showPickupMap ? 'white' : '#6b7280',
+                                            border: 'none',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            fontSize: '16px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                    >
+                                        📍
+                                    </button>
+                                </div>
                                 
                                 {/* Gợi ý địa chỉ */}
                                 {pickupSearching && (
@@ -388,7 +493,7 @@ function CreateOrder() {
                             )}
                         </div>
 
-                        {/* ID người nhận */}
+                        {/* Số điện thoại người nhận */}
                         <div style={{ marginBottom: '20px' }}>
                             <label style={{
                                 display: 'block',
@@ -396,14 +501,16 @@ function CreateOrder() {
                                 fontWeight: '600',
                                 color: '#333'
                             }}>
-                                👤 ID người nhận <span style={{ color: 'red' }}>*</span>
+                                📞 Số điện thoại người nhận <span style={{ color: 'red' }}>*</span>
                             </label>
                             <input
-                                type="number"
-                                name="receiverId"
-                                value={formData.receiverId || ''}
+                                type="tel"
+                                name="receiverPhone"
+                                value={formData.receiverPhone || ''}
                                 onChange={handleChange}
-                                placeholder="Nhập ID người nhận hàng"
+                                placeholder="Nhập số điện thoại người nhận (10-11 số)"
+                                maxLength="11"
+                                pattern="[0-9]{10,11}"
                                 style={{
                                     width: '100%',
                                     padding: '12px',
@@ -413,6 +520,13 @@ function CreateOrder() {
                                 }}
                                 required
                             />
+                            <div style={{
+                                marginTop: '6px',
+                                fontSize: '12px',
+                                color: '#6b7280'
+                            }}>
+                                ℹ️ Nếu số điện thoại chưa đăng ký, hệ thống sẽ tự động tạo tài khoản khách
+                            </div>
                         </div>
 
                         {/* Địa chỉ giao hàng */}
@@ -432,34 +546,80 @@ function CreateOrder() {
                                     value={formData.deliveryAddress}
                                     onChange={handleChange}
                                     placeholder="Nhập địa chỉ giao hàng để tìm kiếm..."
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            if (formData.deliveryAddress && formData.deliveryAddress.length >= 3) {
+                                                searchAddress(formData.deliveryAddress, 'delivery');
+                                            }
+                                        }
+                                    }}
                                     style={{
                                         width: '100%',
                                         padding: '12px',
-                                        paddingRight: '100px',
+                                        paddingRight: '84px',
                                         border: '1px solid #ddd',
                                         borderRadius: '8px',
                                         fontSize: '14px'
                                     }}
                                 />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowDeliveryMap(!showDeliveryMap)}
-                                    style={{
-                                        position: 'absolute',
-                                        right: '8px',
-                                        top: '50%',
-                                        transform: 'translateY(-50%)',
-                                        padding: '6px 12px',
-                                        background: '#3b82f6',
-                                        color: 'white',
-                                        border: 'none',
-                                        borderRadius: '6px',
-                                        cursor: 'pointer',
-                                        fontSize: '12px'
-                                    }}
-                                >
-                                    🗺️ Bản đồ
-                                </button>
+                                <div style={{
+                                    position: 'absolute',
+                                    right: '8px',
+                                    top: '50%',
+                                    transform: 'translateY(-50%)',
+                                    display: 'flex',
+                                    gap: '4px'
+                                }}>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (formData.deliveryAddress && formData.deliveryAddress.length >= 3) {
+                                                setDeliverySearching(true);
+                                                searchAddress(formData.deliveryAddress, 'delivery');
+                                            }
+                                        }}
+                                        disabled={!formData.deliveryAddress || formData.deliveryAddress.length < 3}
+                                        title="Tìm kiếm địa chỉ"
+                                        style={{
+                                            width: '36px',
+                                            height: '36px',
+                                            padding: '0',
+                                            background: formData.deliveryAddress && formData.deliveryAddress.length >= 3 ? '#10b981' : '#e5e7eb',
+                                            color: formData.deliveryAddress && formData.deliveryAddress.length >= 3 ? 'white' : '#9ca3af',
+                                            border: 'none',
+                                            borderRadius: '6px',
+                                            cursor: formData.deliveryAddress && formData.deliveryAddress.length >= 3 ? 'pointer' : 'not-allowed',
+                                            fontSize: '16px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                    >
+                                        🔍
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowDeliveryMap(!showDeliveryMap)}
+                                        title="Chọn trên bản đồ"
+                                        style={{
+                                            width: '36px',
+                                            height: '36px',
+                                            padding: '0',
+                                            background: showDeliveryMap ? '#3b82f6' : '#e5e7eb',
+                                            color: showDeliveryMap ? 'white' : '#6b7280',
+                                            border: 'none',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            fontSize: '16px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                    >
+                                        📍
+                                    </button>
+                                </div>
                                 
                                 {/* Gợi ý địa chỉ */}
                                 {deliverySearching && (

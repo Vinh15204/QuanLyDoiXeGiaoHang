@@ -64,7 +64,7 @@ function DashboardLayout() {
                 <div className="sidebar-header">
                     <div className="logo">
                         <span className="logo-icon">📱</span>
-                        <span className="logo-text">Dashboard</span>
+                        <span className="logo-text">PD-Fleet</span>
                     </div>
                 </div>
                 

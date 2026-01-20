@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/ModernDashboard.css';
 import AddressDisplay from './AddressDisplay';
+import BulkActionToolbar from './BulkActionToolbar';
+import BulkVehicleStatusModal from './BulkVehicleStatusModal';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
@@ -20,6 +22,7 @@ const normalizeCoords = (coords) => {
 function VehiclesManagementNew() {
     const navigate = useNavigate();
     const [vehicles, setVehicles] = useState([]);
+    const [drivers, setDrivers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [selectedVehicle, setSelectedVehicle] = useState(null);
@@ -27,6 +30,14 @@ function VehiclesManagementNew() {
     const [showAddModal, setShowAddModal] = useState(false);
     const [formData, setFormData] = useState({
         id: '',
+        licensePlate: '',
+        model: '',
+        brand: '',
+        year: '',
+        color: '',
+        fuelType: 'diesel',
+        registrationExpiry: '',
+        insuranceExpiry: '',
         type: 'Standard',
         capacity: '',
         status: 'available',
@@ -38,11 +49,68 @@ function VehiclesManagementNew() {
         return user ? JSON.parse(user) : null;
     });
 
+    // Bulk selection states
+    const [selectedVehicles, setSelectedVehicles] = useState([]);
+    const [selectAll, setSelectAll] = useState(false);
+    const [bulkActionLoading, setBulkActionLoading] = useState(false);
+    const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
+
+    // Sorting states
+    const [sortBy, setSortBy] = useState(null);
+    const [sortOrder, setSortOrder] = useState('asc');
+
     console.log('🚛 VehiclesManagementNew rendered');
+
+    const handleSort = (field) => {
+        if (sortBy === field) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(field);
+            setSortOrder('asc');
+        }
+    };
+
+    const getSortedVehicles = () => {
+        if (!sortBy) return vehicles;
+        
+        return [...vehicles].sort((a, b) => {
+            let aVal = a[sortBy];
+            let bVal = b[sortBy];
+            
+            // Handle driver name sorting
+            if (sortBy === 'driver') {
+                const driverA = drivers.find(d => d.vehicleId === a.id);
+                const driverB = drivers.find(d => d.vehicleId === b.id);
+                aVal = driverA?.name || '';
+                bVal = driverB?.name || '';
+            }
+            
+            // Handle null/undefined values
+            if (aVal == null) return 1;
+            if (bVal == null) return -1;
+            
+            // Numeric comparison
+            if (typeof aVal === 'number' && typeof bVal === 'number') {
+                return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+            }
+            
+            // String comparison
+            const comparison = String(aVal).localeCompare(String(bVal));
+            return sortOrder === 'asc' ? comparison : -comparison;
+        });
+    };
 
     const handleAddVehicle = () => {
         setFormData({
             id: '',
+            licensePlate: '',
+            model: '',
+            brand: '',
+            year: '',
+            color: '',
+            fuelType: 'diesel',
+            registrationExpiry: '',
+            insuranceExpiry: '',
             type: 'Standard',
             capacity: '',
             status: 'available',
@@ -62,6 +130,14 @@ function VehiclesManagementNew() {
         setSelectedVehicle(vehicle);
         setFormData({
             id: vehicle.id || '',
+            licensePlate: vehicle.licensePlate || '',
+            model: vehicle.model || '',
+            brand: vehicle.brand || '',
+            year: vehicle.year || '',
+            color: vehicle.color || '',
+            fuelType: vehicle.fuelType || 'diesel',
+            registrationExpiry: vehicle.registrationExpiry ? vehicle.registrationExpiry.split('T')[0] : '',
+            insuranceExpiry: vehicle.insuranceExpiry ? vehicle.insuranceExpiry.split('T')[0] : '',
             type: vehicle.type || 'Standard',
             capacity: vehicle.capacity || vehicle.maxLoad || '',
             status: vehicle.status || 'available',
@@ -77,6 +153,14 @@ function VehiclesManagementNew() {
         setSelectedVehicle(null);
         setFormData({
             id: '',
+            licensePlate: '',
+            model: '',
+            brand: '',
+            year: '',
+            color: '',
+            fuelType: 'diesel',
+            registrationExpiry: '',
+            insuranceExpiry: '',
             type: 'Standard',
             capacity: '',
             status: 'available',
@@ -88,13 +172,21 @@ function VehiclesManagementNew() {
     const handleSaveVehicle = async () => {
         try {
             // Validate form
-            if (!formData.type || !formData.capacity) {
-                alert('Vui lòng điền đầy đủ thông tin!');
+            if (!formData.licensePlate || !formData.capacity) {
+                alert('Vui lòng điền biển số xe và tải trọng!');
                 return;
             }
 
             const vehicleData = {
                 id: formData.id || undefined,
+                licensePlate: formData.licensePlate.toUpperCase(),
+                model: formData.model,
+                brand: formData.brand,
+                year: formData.year ? parseInt(formData.year) : null,
+                color: formData.color,
+                fuelType: formData.fuelType,
+                registrationExpiry: formData.registrationExpiry || null,
+                insuranceExpiry: formData.insuranceExpiry || null,
                 type: formData.type,
                 capacity: parseFloat(formData.capacity),
                 maxLoad: parseFloat(formData.capacity),
@@ -137,12 +229,103 @@ function VehiclesManagementNew() {
         }
     };
 
+    // ==================== BULK SELECTION HANDLERS ====================
+    const handleSelectVehicle = (vehicleId) => {
+        setSelectedVehicles(prev => {
+            if (prev.includes(vehicleId)) {
+                return prev.filter(id => id !== vehicleId);
+            } else {
+                return [...prev, vehicleId];
+            }
+        });
+    };
+
+    const handleSelectAll = () => {
+        if (selectAll) {
+            setSelectedVehicles([]);
+        } else {
+            setSelectedVehicles(vehicles.map(v => v.id));
+        }
+        setSelectAll(!selectAll);
+    };
+
+    const handleClearSelection = () => {
+        setSelectedVehicles([]);
+        setSelectAll(false);
+    };
+
+    const handleBulkStatusChange = async (newStatus) => {
+        try {
+            setBulkActionLoading(true);
+            
+            const response = await fetch(`${API_BASE_URL}/api/vehicles/bulk-status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    vehicleIds: selectedVehicles,
+                    newStatus: newStatus
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                alert(`✅ Đã cập nhật trạng thái ${result.modifiedCount || result.updatedCount} xe!`);
+                await fetchVehicles();
+                handleClearSelection();
+                setShowBulkStatusModal(false);
+            } else {
+                alert(`❌ Lỗi: ${result.message || 'Không thể cập nhật trạng thái'}`);
+            }
+        } catch (error) {
+            console.error('Error bulk status change:', error);
+            alert('Có lỗi xảy ra: ' + error.message);
+        } finally {
+            setBulkActionLoading(false);
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (!window.confirm(`Bạn có chắc muốn xóa ${selectedVehicles.length} xe đã chọn?`)) {
+            return;
+        }
+
+        try {
+            setBulkActionLoading(true);
+            
+            const response = await fetch(`${API_BASE_URL}/api/vehicles/bulk-delete`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    vehicleIds: selectedVehicles
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                alert(`✅ Đã xóa ${result.deletedCount} xe!`);
+                await fetchVehicles();
+                handleClearSelection();
+            } else {
+                alert(`❌ Lỗi: ${result.message || 'Không thể xóa xe'}`);
+            }
+        } catch (error) {
+            console.error('Error bulk delete:', error);
+            alert('Có lỗi xảy ra: ' + error.message);
+        } finally {
+            setBulkActionLoading(false);
+        }
+    };
+    // ==================== END BULK ACTIONS ====================
+
     useEffect(() => {
         if (!currentUser) {
             navigate('/login');
             return;
         }
         fetchVehicles();
+        fetchDrivers();
     }, [currentUser, navigate]);
 
     const fetchVehicles = async () => {
@@ -160,43 +343,108 @@ function VehiclesManagementNew() {
         }
     };
 
+    const fetchDrivers = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/users?role=driver`);
+            if (response.ok) {
+                const data = await response.json();
+                setDrivers(data);
+            }
+        } catch (err) {
+            console.error('Error fetching drivers:', err);
+        }
+    };
+
     return (
-        <div className="management-content">
+        <div className="vehicles-content">
                     <div className="page-header">
                         <h1>Fleet Management</h1>
                         <button className="btn-primary" onClick={handleAddVehicle}>
-                            ➕ Thêm
+                            ➕ Thêm xe
                         </button>
                     </div>
 
                     {loading && <div className="loading">Loading vehicles...</div>}
                     {error && <div className="error-message">{error}</div>}
 
-                    <div className="vehicles-grid">
-                        {vehicles.map((vehicle, index) => (
-                            <div key={index} className="vehicle-card">
-                                <div className="vehicle-header">
-                                    <div className="vehicle-id">Vehicle #{vehicle.id}</div>
-                                    <div className={`vehicle-status ${vehicle.status || 'available'}`}>
-                                        {vehicle.status || 'Available'}
-                                    </div>
-                                </div>
-                                
-                                <div className="vehicle-details">
-                                    <div className="detail-row">
-                                        <span>Type:</span>
-                                        <span>{vehicle.type || 'Standard'}</span>
-                                    </div>
-                                    <div className="detail-row">
-                                        <span>Capacity:</span>
-                                        <span>{vehicle.capacity || vehicle.maxLoad || 0}kg</span>
-                                    </div>
-                                    <div className="detail-row">
-                                        <span>Location:</span>
-                                        <span>
+                    {/* Bulk Action Toolbar */}
+                    <BulkActionToolbar 
+                        selectedCount={selectedVehicles.length}
+                        onClear={handleClearSelection}
+                        onChangeStatus={() => setShowBulkStatusModal(true)}
+                        onDelete={handleBulkDelete}
+                        loading={bulkActionLoading}
+                        hideAssignDriver={true}
+                        hideDelete={true}
+                    />
+
+                    <div className="vehicles-table-container">
+                        <table className="vehicles-table">
+                            <thead>
+                                <tr>
+                                    <th className="checkbox-column">
+                                        <input 
+                                            type="checkbox"
+                                            checked={selectAll}
+                                            onChange={handleSelectAll}
+                                            title="Select all vehicles"
+                                        />
+                                    </th>
+                                    <th onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Vehicle ID {sortBy === 'id' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                    </th>
+                                    <th onClick={() => handleSort('licensePlate')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Biển số {sortBy === 'licensePlate' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                    </th>
+                                    <th onClick={() => handleSort('type')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Type {sortBy === 'type' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                    </th>
+                                    <th onClick={() => handleSort('brand')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Hãng xe {sortBy === 'brand' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                    </th>
+                                    <th onClick={() => handleSort('capacity')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Capacity {sortBy === 'capacity' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                    </th>
+                                    <th onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Status {sortBy === 'status' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                    </th>
+                                    <th>Location</th>
+                                    <th onClick={() => handleSort('driver')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Driver {sortBy === 'driver' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                    </th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {getSortedVehicles().map((vehicle, index) => (
+                                    <tr 
+                                        key={index}
+                                        className={selectedVehicles.includes(vehicle.id) ? 'table-row-selected' : ''}
+                                    >
+                                        <td className="checkbox-column">
+                                            <input 
+                                                type="checkbox"
+                                                checked={selectedVehicles.includes(vehicle.id)}
+                                                onChange={() => handleSelectVehicle(vehicle.id)}
+                                            />
+                                        </td>
+                                        <td>#{vehicle.id}</td>
+                                        <td>{vehicle.licensePlate || '-'}</td>
+                                        <td>{vehicle.type || 'Standard'}</td>
+                                        <td>{vehicle.brand || '-'}</td>
+                                        <td>{vehicle.capacity || vehicle.maxLoad || 0}kg</td>
+                                        <td>
+                                            <span className={`status-badge ${vehicle.status || 'available'}`}>
+                                                {vehicle.status === 'available' ? '✅ Available' : 
+                                                 vehicle.status === 'in_use' ? '🚚 In Use' : 
+                                                 vehicle.status === 'maintenance' ? '🔧 Maintenance' : 
+                                                 vehicle.status || 'Available'}
+                                            </span>
+                                        </td>
+                                        <td>
                                             {vehicle.currentAddress ? (
                                                 <span title={vehicle.currentAddress}>
-                                                    {vehicle.currentAddress.length > 40 ? vehicle.currentAddress.substring(0, 40) + '...' : vehicle.currentAddress}
+                                                    {vehicle.currentAddress.length > 50 ? vehicle.currentAddress.substring(0, 50) + '...' : vehicle.currentAddress}
                                                 </span>
                                             ) : normalizeCoords(vehicle.location || vehicle.position) ? (
                                                 <AddressDisplay 
@@ -206,27 +454,35 @@ function VehiclesManagementNew() {
                                             ) : (
                                                 'Unknown'
                                             )}
-                                        </span>
-                                    </div>
-                                    {vehicle.driverId && (
-                                        <div className="detail-row">
-                                            <span>Driver:</span>
-                                            <span>Driver #{vehicle.driverId}</span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="vehicle-actions">
-                                    <button 
-                                        className="btn-secondary"
-                                        onClick={() => handleViewDetails(vehicle)}
-                                    >
-                                        View Details
-                                    </button>
-                                    <button className="btn-outline" onClick={() => handleEdit(vehicle)}>Edit</button>
-                                </div>
-                            </div>
-                        ))}
+                                        </td>
+                                        <td>
+                                            {(() => {
+                                                const driver = drivers.find(d => d.vehicleId === vehicle.id);
+                                                return driver ? `${driver.name} (#${driver.id})` : '-';
+                                            })()}
+                                        </td>
+                                        <td>
+                                            <div className="action-buttons">
+                                                <button 
+                                                    className="btn-small"
+                                                    onClick={() => handleViewDetails(vehicle)}
+                                                    title="Xem chi tiết"
+                                                >
+                                                    VIEW
+                                                </button>
+                                                <button 
+                                                    className="btn-small-outline" 
+                                                    onClick={() => handleEdit(vehicle)}
+                                                    title="Chỉnh sửa"
+                                                >
+                                                    EDIT
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
 
                     {vehicles.length === 0 && !loading && (
@@ -245,15 +501,54 @@ function VehiclesManagementNew() {
                                     <button className="close-btn" onClick={handleCloseModal}>❌</button>
                                 </div>
                                 <div className="modal-body">
+                                    <h4 style={{marginTop: 0, marginBottom: '15px', color: '#4a5568', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px'}}>🚗 Thông tin xe</h4>
                                     <div className="detail-row">
-                                        <strong>Type:</strong> {selectedVehicle.type || 'Standard'}
+                                        <strong>Biển số xe:</strong> {selectedVehicle.licensePlate || 'Chưa có'}
                                     </div>
                                     <div className="detail-row">
-                                        <strong>Capacity:</strong> {selectedVehicle.capacity || selectedVehicle.maxLoad || 0}kg
+                                        <strong>Hãng xe:</strong> {selectedVehicle.brand || 'Chưa rõ'}
                                     </div>
                                     <div className="detail-row">
-                                        <strong>Status:</strong> {selectedVehicle.status || 'Available'}
+                                        <strong>Dòng xe:</strong> {selectedVehicle.model || 'Chưa rõ'}
                                     </div>
+                                    <div className="detail-row">
+                                        <strong>Năm sản xuất:</strong> {selectedVehicle.year || 'Chưa rõ'}
+                                    </div>
+                                    <div className="detail-row">
+                                        <strong>Màu xe:</strong> {selectedVehicle.color || 'Chưa rõ'}
+                                    </div>
+                                    <div className="detail-row">
+                                        <strong>Loại nhiên liệu:</strong> {(() => {
+                                            const fuelTypes = {
+                                                'diesel': 'Dầu diesel',
+                                                'gasoline': 'Xăng',
+                                                'electric': 'Điện',
+                                                'hybrid': 'Hybrid'
+                                            };
+                                            return fuelTypes[selectedVehicle.fuelType] || selectedVehicle.fuelType || 'Chưa rõ';
+                                        })()}
+                                    </div>
+                                    
+                                    <h4 style={{marginTop: '20px', marginBottom: '15px', color: '#4a5568', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px'}}>📋 Thông số kỹ thuật</h4>
+                                    <div className="detail-row">
+                                        <strong>Loại xe:</strong> {selectedVehicle.type}
+                                    </div>
+                                    <div className="detail-row">
+                                        <strong>Tải trọng:</strong> {selectedVehicle.capacity || selectedVehicle.maxLoad || 0}kg
+                                    </div>
+                                    <div className="detail-row">
+                                        <strong>Trạng thái:</strong> {selectedVehicle.status || 'Available'}
+                                    </div>
+                                    
+                                    <h4 style={{marginTop: '20px', marginBottom: '15px', color: '#4a5568', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px'}}>📄 Giấy tờ xe</h4>
+                                    <div className="detail-row">
+                                        <strong>Hạn đăng kiểm:</strong> {selectedVehicle.registrationExpiry ? new Date(selectedVehicle.registrationExpiry).toLocaleDateString('vi-VN') : 'Chưa có'}
+                                    </div>
+                                    <div className="detail-row">
+                                        <strong>Hạn bảo hiểm:</strong> {selectedVehicle.insuranceExpiry ? new Date(selectedVehicle.insuranceExpiry).toLocaleDateString('vi-VN') : 'Chưa có'}
+                                    </div>
+                                    
+                                    <h4 style={{marginTop: '20px', marginBottom: '15px', color: '#4a5568', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px'}}>📍 Vị trí</h4>
                                     <div className="detail-row">
                                         <strong>Location:</strong> 
                                         {selectedVehicle.currentAddress ? (
@@ -299,14 +594,110 @@ function VehiclesManagementNew() {
                                     <button className="close-btn" onClick={handleCloseModal}>❌</button>
                                 </div>
                                 <div className="modal-body">
-                                    <div className="form-group">
-                                        <label>Vehicle ID</label>
-                                        <input 
-                                            type="text" 
-                                            value={formData.id}
-                                            onChange={(e) => setFormData({...formData, id: e.target.value})}
-                                            placeholder="Nhập ID xe (tự động nếu để trống)"
-                                        />
+                                    <div className="form-row">
+                                        <div className="form-group">
+                                            <label>Vehicle ID</label>
+                                            <input 
+                                                type="text" 
+                                                value={formData.id}
+                                                onChange={(e) => setFormData({...formData, id: e.target.value})}
+                                                placeholder="Tự động nếu để trống"
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Biển số xe <span className="required">*</span></label>
+                                            <input 
+                                                type="text" 
+                                                value={formData.licensePlate}
+                                                onChange={(e) => setFormData({...formData, licensePlate: e.target.value})}
+                                                placeholder="VD: 29A-12345"
+                                                style={{textTransform: 'uppercase'}}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="form-row">
+                                        <div className="form-group">
+                                            <label>Hãng xe</label>
+                                            <input 
+                                                type="text" 
+                                                value={formData.brand}
+                                                onChange={(e) => setFormData({...formData, brand: e.target.value})}
+                                                placeholder="Hyundai, Isuzu, Hino..."
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Dòng xe</label>
+                                            <input 
+                                                type="text" 
+                                                value={formData.model}
+                                                onChange={(e) => setFormData({...formData, model: e.target.value})}
+                                                placeholder="H150, QKR77H..."
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="form-row">
+                                        <div className="form-group">
+                                            <label>Năm sản xuất</label>
+                                            <input 
+                                                type="number" 
+                                                value={formData.year}
+                                                onChange={(e) => setFormData({...formData, year: e.target.value})}
+                                                placeholder="2024"
+                                                min="1990"
+                                                max="2030"
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Màu xe</label>
+                                            <input 
+                                                type="text" 
+                                                value={formData.color}
+                                                onChange={(e) => setFormData({...formData, color: e.target.value})}
+                                                placeholder="Trắng, Xanh..."
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="form-row">
+                                        <div className="form-group">
+                                            <label>Loại nhiên liệu</label>
+                                            <select 
+                                                value={formData.fuelType}
+                                                onChange={(e) => setFormData({...formData, fuelType: e.target.value})}
+                                            >
+                                                <option value="diesel">Dầu diesel</option>
+                                                <option value="gasoline">Xăng</option>
+                                                <option value="electric">Điện</option>
+                                                <option value="hybrid">Hybrid</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Sức chứa (kg) <span className="required">*</span></label>
+                                            <input 
+                                                type="number" 
+                                                value={formData.capacity}
+                                                onChange={(e) => setFormData({...formData, capacity: e.target.value})}
+                                                placeholder="Nhập tải trọng"
+                                                min="0"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="form-row">
+                                        <div className="form-group">
+                                            <label>Hạn đăng kiểm</label>
+                                            <input 
+                                                type="date" 
+                                                value={formData.registrationExpiry}
+                                                onChange={(e) => setFormData({...formData, registrationExpiry: e.target.value})}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label>Hạn bảo hiểm</label>
+                                            <input 
+                                                type="date" 
+                                                value={formData.insuranceExpiry}
+                                                onChange={(e) => setFormData({...formData, insuranceExpiry: e.target.value})}
+                                            />
+                                        </div>
                                     </div>
                                     <div className="form-group">
                                         <label>Loại xe</label>
@@ -320,16 +711,6 @@ function VehiclesManagementNew() {
                                             <option value="Van">Van</option>
                                             <option value="Motorcycle">Motorcycle</option>
                                         </select>
-                                    </div>
-                                    <div className="form-group">
-                                        <label>Sức chứa (kg)</label>
-                                        <input 
-                                            type="number" 
-                                            value={formData.capacity}
-                                            onChange={(e) => setFormData({...formData, capacity: e.target.value})}
-                                            placeholder="Nhập sức chứa"
-                                            min="0"
-                                        />
                                     </div>
                                     <div className="form-group">
                                         <label>Trạng thái</label>
@@ -374,6 +755,14 @@ function VehiclesManagementNew() {
                             </div>
                         </div>
                     )}
+
+                    {/* Bulk Status Change Modal */}
+                    <BulkVehicleStatusModal 
+                        isOpen={showBulkStatusModal}
+                        onClose={() => setShowBulkStatusModal(false)}
+                        onConfirm={handleBulkStatusChange}
+                        selectedCount={selectedVehicles.length}
+                    />
                 </div>
     );
 }

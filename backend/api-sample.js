@@ -226,6 +226,234 @@ app.post('/api/orders', async (req, res, next) => {
   }
 });
 
+// Bulk assign driver to multiple orders
+app.post('/api/orders/bulk-assign', async (req, res, next) => {
+  try {
+    const { orderIds, driverId } = req.body;
+
+    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ 
+        error: 'Invalid request',
+        message: 'orderIds must be a non-empty array'
+      });
+    }
+
+    if (!driverId) {
+      return res.status(400).json({ 
+        error: 'Invalid request',
+        message: 'driverId is required'
+      });
+    }
+
+    // Verify driver exists - driverId có thể là vehicleId hoặc user.id
+    const driver = await User.findOne({ 
+      $or: [
+        { id: driverId, role: 'driver' },
+        { vehicleId: driverId, role: 'driver' }
+      ]
+    });
+    
+    if (!driver) {
+      return res.status(404).json({ 
+        error: 'Driver not found',
+        message: `Driver with id ${driverId} not found`
+      });
+    }
+
+    // Update all orders - sử dụng vehicleId nếu có, nếu không thì dùng driver.id
+    const vehicleId = driver.vehicleId || driver.id;
+    const result = await Order.updateMany(
+      { id: { $in: orderIds } },
+      { 
+        $set: { 
+          driverId: vehicleId,
+          status: 'assigned',
+          assignmentType: 'manual',
+          assignedAt: new Date(),
+          updatedAt: new Date()
+        }
+      }
+    );
+
+    // Emit real-time update
+    if (global.deliveryHub) {
+      global.deliveryHub.notifyOrdersUpdated();
+    }
+
+    res.json({ 
+      success: true,
+      message: `${result.modifiedCount} orders assigned to driver ${driver.name}`,
+      modifiedCount: result.modifiedCount
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Bulk change status of multiple orders
+app.put('/api/orders/bulk-status', async (req, res, next) => {
+  try {
+    const { orderIds, newStatus, unassignDriver } = req.body;
+
+    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ 
+        error: 'Invalid request',
+        message: 'orderIds must be a non-empty array'
+      });
+    }
+
+    if (!newStatus) {
+      return res.status(400).json({ 
+        error: 'Invalid request',
+        message: 'newStatus is required'
+      });
+    }
+
+    const validStatuses = ['pending', 'assigned', 'in_transit', 'delivered', 'cancelled', 'approved'];
+    if (!validStatuses.includes(newStatus)) {
+      return res.status(400).json({ 
+        error: 'Invalid status',
+        message: `Status must be one of: ${validStatuses.join(', ')}`
+      });
+    }
+
+    // Prepare update object
+    const updateObj = { 
+      status: newStatus,
+      updatedAt: new Date()
+    };
+
+    // If unassignDriver is true, also clear driverId and assignmentType
+    if (unassignDriver) {
+      updateObj.driverId = null;
+      updateObj.assignmentType = null;
+    }
+
+    // Update all orders
+    const result = await Order.updateMany(
+      { id: { $in: orderIds } },
+      { $set: updateObj }
+    );
+
+    // Emit real-time update
+    if (global.deliveryHub) {
+      global.deliveryHub.notifyOrdersUpdated();
+    }
+
+    res.json({ 
+      success: true,
+      message: `${result.modifiedCount} orders updated to status: ${newStatus}`,
+      modifiedCount: result.modifiedCount
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Bulk delete multiple orders
+app.delete('/api/orders/bulk-delete', async (req, res, next) => {
+  try {
+    const { orderIds } = req.body;
+
+    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ 
+        error: 'Invalid request',
+        message: 'orderIds must be a non-empty array'
+      });
+    }
+
+    // Delete all orders
+    const result = await Order.deleteMany(
+      { id: { $in: orderIds } }
+    );
+
+    // Emit real-time update
+    if (global.deliveryHub) {
+      global.deliveryHub.notifyOrdersUpdated();
+    }
+
+    res.json({ 
+      success: true,
+      message: `${result.deletedCount} orders deleted`,
+      deletedCount: result.deletedCount
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ==================== VEHICLE BULK OPERATIONS ====================
+
+// Bulk change status of multiple vehicles
+app.put('/api/vehicles/bulk-status', async (req, res, next) => {
+  try {
+    const { vehicleIds, newStatus } = req.body;
+
+    if (!vehicleIds || !Array.isArray(vehicleIds) || vehicleIds.length === 0) {
+      return res.status(400).json({ 
+        error: 'Invalid request',
+        message: 'vehicleIds must be a non-empty array'
+      });
+    }
+
+    if (!newStatus) {
+      return res.status(400).json({ 
+        error: 'Invalid request',
+        message: 'newStatus is required'
+      });
+    }
+
+    const validStatuses = ['available', 'in_use', 'maintenance'];
+    if (!validStatuses.includes(newStatus)) {
+      return res.status(400).json({ 
+        error: 'Invalid status',
+        message: `Status must be one of: ${validStatuses.join(', ')}`
+      });
+    }
+
+    // Update all vehicles
+    const result = await Vehicle.updateMany(
+      { id: { $in: vehicleIds } },
+      { $set: { status: newStatus } }
+    );
+
+    res.json({ 
+      success: true,
+      message: `${result.modifiedCount} vehicles updated to status: ${newStatus}`,
+      modifiedCount: result.modifiedCount
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Bulk delete multiple vehicles
+app.delete('/api/vehicles/bulk-delete', async (req, res, next) => {
+  try {
+    const { vehicleIds } = req.body;
+
+    if (!vehicleIds || !Array.isArray(vehicleIds) || vehicleIds.length === 0) {
+      return res.status(400).json({ 
+        error: 'Invalid request',
+        message: 'vehicleIds must be a non-empty array'
+      });
+    }
+
+    // Delete all vehicles
+    const result = await Vehicle.deleteMany(
+      { id: { $in: vehicleIds } }
+    );
+
+    res.json({ 
+      success: true,
+      message: `${result.deletedCount} vehicles deleted`,
+      deletedCount: result.deletedCount
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Lấy danh sách users
 app.get('/api/users', async (req, res) => {
   try {
@@ -267,10 +495,129 @@ app.post('/api/users', async (req, res, next) => {
   }
 });
 
+// Bulk update user status - MUST come before /api/users/:id to avoid route collision
+app.put('/api/users/bulk-status', async (req, res, next) => {
+  try {
+    const { ids, status } = req.body;
+
+    console.log('Bulk status update request:', { ids, status });
+
+    if (!User) {
+      return res.status(500).json({ 
+        error: 'Database not initialized',
+        message: 'Please try again in a few moments'
+      });
+    }
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Invalid ids array' });
+    }
+
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+
+    // Determine if IDs are ObjectIds or numeric IDs
+    const firstId = String(ids[0]);
+    const isObjectId = firstId.match(/^[0-9a-fA-F]{24}$/);
+    
+    console.log('ID type detection:', { firstId, isObjectId });
+    
+    let query;
+    if (isObjectId) {
+      // Use ObjectId for MongoDB _id field
+      const mongoose = require('mongoose');
+      query = { _id: { $in: ids.map(id => new mongoose.Types.ObjectId(id)) } };
+    } else {
+      // Use numeric ID for custom id field
+      const numericIds = ids.map(id => {
+        const num = parseInt(id);
+        if (isNaN(num)) {
+          throw new Error(`Invalid numeric ID: ${id}`);
+        }
+        return num;
+      });
+      query = { id: { $in: numericIds } };
+    }
+
+    console.log('Query:', JSON.stringify(query));
+
+    const result = await User.updateMany(
+      query,
+      { $set: { status, updatedAt: new Date() } }
+    );
+
+    console.log(`✅ Updated status for ${result.modifiedCount} users to ${status}`);
+    res.json({ 
+      success: true, 
+      modifiedCount: result.modifiedCount,
+      message: `Updated ${result.modifiedCount} users` 
+    });
+  } catch (err) {
+    console.error('❌ Error in bulk status update:', err);
+    res.status(500).json({ 
+      error: 'Something went wrong!',
+      message: err.message
+    });
+  }
+});
+
+// Bulk delete users - MUST come before /api/users/:id
+app.delete('/api/users/bulk-delete', async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+
+    if (!User) {
+      return res.status(500).json({ 
+        error: 'Database not initialized',
+        message: 'Please try again in a few moments'
+      });
+    }
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Invalid ids array' });
+    }
+
+    // Determine if IDs are ObjectIds or numeric IDs
+    const firstId = String(ids[0]);
+    const isObjectId = firstId.match(/^[0-9a-fA-F]{24}$/);
+    
+    let query;
+    if (isObjectId) {
+      const mongoose = require('mongoose');
+      query = { _id: { $in: ids.map(id => new mongoose.Types.ObjectId(id)) } };
+    } else {
+      const numericIds = ids.map(id => {
+        const num = parseInt(id);
+        if (isNaN(num)) {
+          throw new Error(`Invalid numeric ID: ${id}`);
+        }
+        return num;
+      });
+      query = { id: { $in: numericIds } };
+    }
+
+    const result = await User.deleteMany(query);
+
+    console.log(`✅ Deleted ${result.deletedCount} users`);
+    res.json({ 
+      success: true, 
+      deletedCount: result.deletedCount,
+      message: `Deleted ${result.deletedCount} users` 
+    });
+  } catch (err) {
+    console.error('❌ Error in bulk delete:', err);
+    res.status(500).json({ 
+      error: 'Something went wrong!',
+      message: err.message
+    });
+  }
+});
+
 // Cập nhật user
 app.put('/api/users/:id', async (req, res, next) => {
   try {
-    const userId = parseInt(req.params.id);
+    const userId = req.params.id;
     
     if (!User) {
       return res.status(500).json({ 
@@ -285,10 +632,27 @@ app.put('/api/users/:id', async (req, res, next) => {
       delete updateData.password;
     }
 
+    // Try to find by MongoDB _id first (if it's a valid ObjectId), otherwise by custom id field
+    let query;
+    if (userId.match(/^[0-9a-fA-F]{24}$/)) {
+      // It's a valid MongoDB ObjectId
+      query = { _id: userId };
+    } else {
+      // It's a custom numeric id
+      const numericId = parseInt(userId);
+      if (isNaN(numericId)) {
+        return res.status(400).json({ 
+          error: 'Invalid user ID',
+          message: `User ID must be a number or valid ObjectId, received: ${userId}`
+        });
+      }
+      query = { id: numericId };
+    }
+
     const user = await User.findOneAndUpdate(
-      { id: userId },
+      query,
       { $set: { ...updateData, updatedAt: new Date() } },
-      { new: true, runValidators: true }
+      { new: true, runValidators: false }
     );
 
     if (!user) {
@@ -303,6 +667,66 @@ app.put('/api/users/:id', async (req, res, next) => {
   } catch (err) {
     console.error('Error updating user:', err);
     next(err);
+  }
+});
+
+// PATCH endpoint (same as PUT for partial updates)
+app.patch('/api/users/:id', async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+    
+    if (!User) {
+      return res.status(500).json({ 
+        error: 'Database not initialized',
+        message: 'Please try again in a few moments'
+      });
+    }
+
+    // Remove password from update if it's empty or not provided
+    const updateData = { ...req.body };
+    if (!updateData.password) {
+      delete updateData.password;
+    }
+    
+    // Remove fields that shouldn't be updated via PATCH
+    delete updateData._id;
+    delete updateData.id; // Don't allow changing user ID
+    delete updateData.username; // Don't allow changing username
+    
+    // Add updatedAt timestamp
+    updateData.updatedAt = new Date();
+
+    // Try to find by MongoDB _id first (if it's a valid ObjectId), otherwise by custom id field
+    let query;
+    if (userId.match(/^[0-9a-fA-F]{24}$/)) {
+      // It's a valid MongoDB ObjectId
+      query = { _id: userId };
+    } else {
+      // It's a custom numeric id
+      query = { id: parseInt(userId) };
+    }
+
+    const user = await User.findOneAndUpdate(
+      query,
+      { $set: updateData },
+      { new: true, runValidators: false } // Disable validators to avoid issues with required fields
+    );
+
+    if (!user) {
+      return res.status(404).json({ 
+        error: 'User not found',
+        message: `User with id ${userId} not found`
+      });
+    }
+
+    console.log(`✅ User ${userId} updated successfully:`, updateData);
+    res.json(user);
+  } catch (err) {
+    console.error('❌ Error updating user:', err);
+    res.status(500).json({
+      error: 'Update failed',
+      message: err.message
+    });
   }
 });
 

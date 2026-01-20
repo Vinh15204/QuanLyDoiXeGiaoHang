@@ -33,6 +33,7 @@ function DriverPage() {
     const [viewMode, setViewMode] = useState('map'); // 'map' or 'list'
     const [mapDisplayMode, setMapDisplayMode] = useState('full'); // 'full' or 'next'
     const [orders, setOrders] = useState([]);
+    const [users, setUsers] = useState([]); // Store all users for contact info
     const [nextStopRoute, setNextStopRoute] = useState(null); // OSRM route to next stop
     const [vehicleCurrentPosition, setVehicleCurrentPosition] = useState(null); // Current vehicle position
     const [lastCompletedStop, setLastCompletedStop] = useState(null); // Track last completed stop
@@ -135,6 +136,28 @@ function DriverPage() {
         const interval = setInterval(fetchOrders, 30000);
         return () => clearInterval(interval);
     }, [currentDriver]);
+
+    // Fetch all users for contact information
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/users`);
+                if (response.ok) {
+                    const data = await response.json();
+                    // Flatten if data has nested structure
+                    const allUsers = data.users && data.drivers && data.admins 
+                        ? [...data.users, ...data.drivers, ...data.admins]
+                        : data;
+                    setUsers(allUsers);
+                    console.log('✅ Loaded users:', allUsers.length);
+                }
+            } catch (error) {
+                console.error('Error fetching users:', error);
+            }
+        };
+
+        fetchUsers();
+    }, []);
 
     // Enrich route stops with addresses from orders when both are loaded
     useEffect(() => {
@@ -441,7 +464,7 @@ function DriverPage() {
     }, [mapDisplayMode, route?.vehicleId, orders, vehicleCurrentPosition]);
 
     return (
-        <div className="main-content">
+        <div className="main-content driver-page">
                 {/* Top Header */}
                 <div className="top-header">
                     <div className="header-left">
@@ -449,41 +472,6 @@ function DriverPage() {
                         <p>Xem chi tiết lộ trình và các điểm giao hàng</p>
                     </div>
                     <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        {/* Map Display Mode Toggle */}
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <button 
-                                onClick={() => setMapDisplayMode('full')}
-                                style={{
-                                    padding: '10px 20px',
-                                    background: mapDisplayMode === 'full' ? '#3b82f6' : '#e5e7eb',
-                                    color: mapDisplayMode === 'full' ? 'white' : '#6b7280',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    cursor: 'pointer',
-                                    fontSize: '14px',
-                                    fontWeight: '500',
-                                    transition: 'all 0.2s'
-                                }}
-                            >
-                                🗺️ Toàn bộ
-                            </button>
-                            <button 
-                                onClick={() => setMapDisplayMode('next')}
-                                style={{
-                                    padding: '10px 20px',
-                                    background: mapDisplayMode === 'next' ? '#3b82f6' : '#e5e7eb',
-                                    color: mapDisplayMode === 'next' ? 'white' : '#6b7280',
-                                    border: 'none',
-                                    borderRadius: '8px',
-                                    cursor: 'pointer',
-                                    fontSize: '14px',
-                                    fontWeight: '500',
-                                    transition: 'all 0.2s'
-                                }}
-                            >
-                                📍 Điểm kế tiếp
-                            </button>
-                        </div>
                         <button 
                             onClick={() => window.location.reload()}
                             style={{
@@ -508,10 +496,10 @@ function DriverPage() {
                 </div>
 
                 {/* Dashboard Content */}
-                <div className="dashboard-content">
+                <div className="driver-dashboard-content">
 
                     {/* Map View */}
-                    <div className="map-section">
+                    <div className="driver-map-section">
                         {!currentDriver?.vehicleId ? (
                             <div className="empty-state">
                                 <div className="empty-icon">⚠️</div>
@@ -795,7 +783,27 @@ function DriverPage() {
                     </div>
 
                     {/* Sidebar Info Panel */}
-                    <div className="control-panel">
+                    <div className="driver-control-panel">
+                        {/* Map Display Mode Toggle - Sticky at top of control panel */}
+                        <div className="mode-toggle-buttons">
+                            <button 
+                                onClick={() => setMapDisplayMode('full')}
+                                className={`mode-btn ${mapDisplayMode === 'full' ? 'active' : ''}`}
+                            >
+                                <span className="mode-icon">🗺️</span>
+                                <span className="mode-text">TOÀN BỘ</span>
+                            </button>
+                            <button 
+                                onClick={() => setMapDisplayMode('next')}
+                                className={`mode-btn ${mapDisplayMode === 'next' ? 'active' : ''}`}
+                            >
+                                <span className="mode-icon">📍</span>
+                                <span className="mode-text">ĐIỂM KẾ TIẾP</span>
+                            </button>
+                        </div>
+                        
+                        {/* Control Panel Content */}
+                        <div className="control-panel-content">
                         {mapDisplayMode === 'next' ? (
                             /* Next Stop Mode - Show only next destination */
                             (() => {
@@ -820,12 +828,17 @@ function DriverPage() {
                                 const order = orders.find(o => o.id === nextStop.orderId);
                                 const nextAction = getNextStatusForStop(nextStop, order);
                                 
+                                // Get contact info based on stop type
+                                const contactUserId = nextStop.type === 'pickup' ? order?.senderId : order?.receiverId;
+                                const contactUser = users.find(u => u.id === contactUserId);
+                                
                                 // Debug logging
                                 console.log('🔍 Next Stop Panel:', {
                                     nextStop: { orderId: nextStop.orderId, type: nextStop.type },
                                     lastCompleted: lastCompletedStop ? { orderId: lastCompletedStop.orderId, type: lastCompletedStop.type } : null,
                                     orderStatus: order?.status,
                                     nextAction: nextAction?.label,
+                                    contactUser: contactUser ? { name: contactUser.name, phone: contactUser.phone } : null,
                                     shouldShowMoveButton: lastCompletedStop && 
                                                           lastCompletedStop.orderId === nextStop.orderId && 
                                                           lastCompletedStop.type === nextStop.type
@@ -870,6 +883,40 @@ function DriverPage() {
                                                     }
                                                 </div>
                                             </div>
+
+                                            {/* Contact Information */}
+                                            {contactUser && (
+                                                <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: '8px' }}>
+                                                    <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px', fontWeight: '600' }}>
+                                                        👤 LIÊN HỆ
+                                                    </div>
+                                                    <div style={{ marginBottom: '8px' }}>
+                                                        <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '4px' }}>
+                                                            {contactUser.name || 'Chưa có tên'}
+                                                        </div>
+                                                        {contactUser.phone && (
+                                                            <a 
+                                                                href={`tel:${contactUser.phone}`}
+                                                                style={{ 
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '6px',
+                                                                    padding: '8px 12px',
+                                                                    background: '#10b981',
+                                                                    color: 'white',
+                                                                    textDecoration: 'none',
+                                                                    borderRadius: '6px',
+                                                                    fontSize: '14px',
+                                                                    fontWeight: '600',
+                                                                    marginTop: '8px'
+                                                                }}
+                                                            >
+                                                                📞 {contactUser.phone}
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             {/* Weight */}
                                             {nextStop.weight && (
@@ -1101,6 +1148,7 @@ function DriverPage() {
                         )}
                             </>
                         )}
+                        </div>
                     </div>
                 </div>
             </div>

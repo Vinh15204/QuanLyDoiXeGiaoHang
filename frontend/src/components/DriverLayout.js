@@ -51,7 +51,7 @@ function DriverLayout() {
                 <div className="sidebar-header">
                     <div className="logo">
                         <span className="logo-icon">🚚</span>
-                        <span className="logo-text">Tài Xế</span>
+                        <span className="logo-text">PD-Fleet</span>
                     </div>
                 </div>
                 

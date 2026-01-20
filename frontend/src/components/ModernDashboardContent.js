@@ -373,23 +373,202 @@ function ModernDashboard() {
             {loading ? (
                 <div className="loading">Đang tải dữ liệu...</div>
             ) : (
-                <>
+                <>  
                     {/* Dashboard Content */}
                     <div className="dashboard-content">
-                        {/* Map Section */}
-                        <div className="map-section">
-                            {/* Route Filter Panel */}
+                        {/* Map and Filter Container */}
+                        <div style={{ display: 'flex', gap: '28px', height: '600px' }}>
+                            {/* Map Section */}
+                            <div className="map-section" style={{ flex: 1, height: '100%' }}>
+                                <MapContainer 
+                                    center={HANOI_CENTER} 
+                                    zoom={12} 
+                                    className="map-container"
+                                    style={{ height: '100%', width: '100%' }}
+                                >
+                                    <TileLayer
+                                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                    />
+                                    
+                                    {/* Render vehicles */}
+                                    {vehicles
+                                        .filter(vehicle => {
+                                            // Nếu showAllOrders = true, hiện tất cả xe
+                                            if (showAllOrders) return true;
+                                            // Nếu showAllOrders = false, chỉ hiện xe có route được bật
+                                            return visibleRoutes[vehicle.id] === true;
+                                        })
+                                        .map((vehicle, index) => {
+                                        // Get position from vehicle.location or vehicle.position
+                                        const position = vehicle.location || vehicle.position || HANOI_CENTER;
+                                        
+                                        // Validate position is array with 2 numbers
+                                        if (!Array.isArray(position) || position.length !== 2 || 
+                                            typeof position[0] !== 'number' || typeof position[1] !== 'number') {
+                                            console.warn(`Invalid position for vehicle ${vehicle.id}:`, position);
+                                            return null;
+                                        }
+                                        
+                                        return (
+                                        <Marker 
+                                            key={`vehicle-${vehicle.id || index}`}
+                                            position={position}
+                                            icon={vehicleIcon}
+                                        >
+                                            <Popup>
+                                                <div>
+                                                    <h4>Xe {vehicle.id}</h4>
+                                                    <p>Loại: {vehicle.type}</p>
+                                                    <p>Tải trọng: {vehicle.capacity}kg</p>
+                                                    <p>Trạng thái: {vehicle.status}</p>
+                                                </div>
+                                            </Popup>
+                                        </Marker>
+                                        );
+                                    })}
+                                    
+                                    {/* Render orders - only if showAllOrders is true */}
+                                    {showAllOrders && orders.map((order, index) => (
+                                        <React.Fragment key={`order-${index}`}>
+                                            <Marker position={order.pickup} icon={pickupIcon}>
+                                                <Popup>Điểm lấy hàng - Đơn {order.id}</Popup>
+                                            </Marker>
+                                            <Marker position={order.delivery} icon={deliveryIcon}>
+                                                <Popup>Điểm giao hàng - Đơn {order.id}</Popup>
+                                            </Marker>
+                                        </React.Fragment>
+                                    ))}
+                                    
+                                    {/* Render optimized routes */}
+                                    {visibleRoutesData.map((route, index) => {
+                                        // Validate path before rendering
+                                        if (!route.path || !Array.isArray(route.path) || route.path.length < 2) {
+                                            console.error(`❌ Invalid path for route ${route.vehicleId}:`, route.path);
+                                            return null;
+                                        }
+                                        
+                                        return (
+                                        <React.Fragment key={`route-${route.vehicleId}`}>
+                                            {/* Route line */}
+                                            <Polyline
+                                                positions={route.path}
+                                                color={ROUTE_COLORS[route.colorIndex % ROUTE_COLORS.length]}
+                                                weight={4}
+                                                opacity={0.7}
+                                            >
+                                                    <Popup>
+                                                        <div>
+                                                            <h4>Route - Xe {route.vehicleId}</h4>
+                                                            <p>Khoảng cách: {(route.distance || 0).toFixed(2)} km</p>
+                                                            <p>Thời gian: {Math.round(route.duration || 0)} phút</p>
+                                                            <p>Số điểm dừng: {route.stops?.length || 0}</p>
+                                                            <p>Số đơn hàng: {route.assignedOrders?.length || 0}</p>
+                                                            <p>Tải trọng: {route.totalWeight || 0} kg</p>
+                                                        </div>
+                                                    </Popup>
+                                                </Polyline>
+                                            
+                                                {/* Route stops markers */}
+                                                {route.stops && route.stops.map((stop, stopIndex) => {
+                                                    if (stop.type === 'depot') return null; // Skip depot
+                                                    
+                                                    // Tìm order tương ứng để lấy thông tin đầy đủ
+                                                    const relatedOrder = orders.find(o => o.id === stop.orderId);
+                                                    
+                                                    // Lấy địa chỉ từ stop hoặc từ order (nếu đã có), nếu không có thì fallback sang AddressDisplay
+                                                    const currentAddress = stop.type === 'pickup' 
+                                                        ? (stop.pickupAddress || relatedOrder?.pickupAddress)
+                                                        : (stop.deliveryAddress || relatedOrder?.deliveryAddress);
+                                                    
+                                                    const otherAddress = stop.type === 'pickup'
+                                                        ? (stop.deliveryAddress || relatedOrder?.deliveryAddress)
+                                                        : (stop.pickupAddress || relatedOrder?.pickupAddress);
+                                                    
+                                                    return (
+                                                        <Marker
+                                                            key={`stop-${index}-${stopIndex}`}
+                                                            position={stop.point}
+                                                            icon={stop.type === 'pickup' ? pickupIcon : deliveryIcon}
+                                                        >
+                                                            <Popup maxWidth={300}>
+                                                                <div style={{ minWidth: '250px' }}>
+                                                                    <h3 style={{ margin: '0 0 10px 0', fontSize: '16px', borderBottom: '2px solid var(--color-primary)', paddingBottom: '5px', color: 'var(--color-text-primary)' }}>
+                                                                        {stop.type === 'pickup' ? '📦 Điểm lấy hàng' : '🎯 Điểm giao hàng'}
+                                                                    </h3>
+                                                                    
+                                                                    <p style={{ margin: '5px 0', fontSize: '14px' }}>
+                                                                        <strong>Đơn hàng:</strong> #{stop.orderId}
+                                                                    </p>
+                                                                    
+                                                                    <p style={{ margin: '5px 0', fontSize: '14px' }}>
+                                                                        <strong>Xe:</strong> #{route.vehicleId}
+                                                                    </p>
+                                                                    
+                                                                    {stop.weight && (
+                                                                        <p style={{ margin: '5px 0', fontSize: '14px' }}>
+                                                                            <strong>Khối lượng:</strong> {stop.weight}kg
+                                                                        </p>
+                                                                    )}
+                                                                    
+                                                                    <p style={{ margin: '5px 0', fontSize: '14px' }}>
+                                                                        <strong>Điểm dừng:</strong> {stopIndex}/{route.stops.length - 1}
+                                                                    </p>
+                                                                    
+                                                                    <div style={{ marginTop: '10px', padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+                                                                        <p style={{ margin: '3px 0', fontSize: '13px' }}>
+                                                                            <strong>📍 Địa chỉ {stop.type === 'pickup' ? 'lấy hàng' : 'giao hàng'}:</strong>
+                                                                        </p>
+                                                                        <div style={{ marginTop: '5px', fontSize: '12px', color: '#555' }}>
+                                                                            {currentAddress ? (
+                                                                                <span>{currentAddress}</span>
+                                                                            ) : (
+                                                                                <AddressDisplay 
+                                                                                    coordinates={stop.point} 
+                                                                                    short={false}
+                                                                                />
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                    
+                                                                    {(otherAddress || relatedOrder) && (
+                                                                        <div style={{ marginTop: '10px', padding: '8px', backgroundColor: '#e8f4f8', borderRadius: '4px' }}>
+                                                                            <p style={{ margin: '3px 0', fontSize: '13px' }}>
+                                                                                <strong>
+                                                                                    {stop.type === 'pickup' ? '🏁 Gửi đến:' : '📮 Gửi từ:'}
+                                                                                </strong>
+                                                                            </p>
+                                                                            <div style={{ marginTop: '5px', fontSize: '12px', color: '#555' }}>
+                                                                                {otherAddress ? (
+                                                                                    <span>{otherAddress}</span>
+                                                                                ) : relatedOrder ? (
+                                                                                    <AddressDisplay 
+                                                                                        coordinates={stop.type === 'pickup' ? relatedOrder.delivery : relatedOrder.pickup} 
+                                                                                        short={true}
+                                                                                    />
+                                                                                ) : null}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </Popup>
+                                                        </Marker>
+                                                    );
+                                                })}
+                                        </React.Fragment>
+                                        );
+                                    })}
+                                </MapContainer>
+                            </div>
+
+                            {/* Route Filter Panel - Always Expanded */}
                             {optimizedRoutes && optimizedRoutes.length > 0 && (
-                                <div className={`route-filter-panel ${showRouteFilter ? 'expanded' : 'collapsed'}`}>
+                                <div className="route-filter-panel expanded">
                                     {/* Header - Always visible */}
                                     <div className="filter-panel-header">
-                                        <div 
-                                            style={{ display: 'flex', alignItems: 'center', flex: 1, cursor: 'pointer' }}
-                                            onClick={() => setShowRouteFilter(!showRouteFilter)}
-                                        >
+                                        <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
                                             <span className="panel-icon">🗺️</span>
                                             <span className="panel-title">Routes ({optimizedRoutes.length})</span>
-                                            <span className={`panel-arrow ${showRouteFilter ? 'open' : ''}`}>▼</span>
                                         </div>
                                         <button 
                                             className="refresh-routes-btn"
@@ -400,27 +579,36 @@ function ModernDashboard() {
                                             }}
                                             title="Làm mới dữ liệu"
                                             style={{
-                                                background: 'rgba(59, 130, 246, 0.1)',
-                                                border: '1px solid rgba(59, 130, 246, 0.3)',
+                                                background: '#f3f4f6',
+                                                border: 'none',
+                                                width: '32px',
+                                                height: '32px',
                                                 borderRadius: '8px',
-                                                fontSize: '14px',
+                                                fontSize: '18px',
                                                 cursor: 'pointer',
-                                                padding: '6px 12px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                transition: 'all 0.2s ease',
                                                 marginLeft: '8px',
                                                 color: '#3b82f6',
-                                                fontWeight: '500',
-                                                transition: 'all 0.2s'
+                                                fontWeight: '600'
                                             }}
-                                            onMouseEnter={(e) => e.target.style.background = 'rgba(59, 130, 246, 0.2)'}
-                                            onMouseLeave={(e) => e.target.style.background = 'rgba(59, 130, 246, 0.1)'}
+                                            onMouseEnter={(e) => {
+                                                e.target.style.background = '#e5e7eb';
+                                                e.target.style.transform = 'scale(1.05)';
+                                            }}
+                                            onMouseLeave={(e) => {
+                                                e.target.style.background = '#f3f4f6';
+                                                e.target.style.transform = 'scale(1)';
+                                            }}
                                         >
                                             🔄
                                         </button>
                                     </div>
                                     
-                                    {/* Content - Only when expanded */}
-                                    {showRouteFilter && (
-                                        <div className="filter-panel-content">
+                                    {/* Content - Always visible */}
+                                    <div className="filter-panel-content">
                                             {/* Orders Toggle */}
                                             <div className="orders-toggle-section">
                                                 <label className="orders-toggle-label">
@@ -430,7 +618,7 @@ function ModernDashboard() {
                                                         onChange={() => setShowAllOrders(!showAllOrders)}
                                                     />
                                                     <span className="toggle-text">
-                                                        {showAllOrders ? '📍 Hiện tất cả đơn hàng' : '🚫 Ẩn đơn hàng'}
+                                                        {showAllOrders ? '📍 Hiện tất cả đơn hàng và xe' : '🚫 Ẩn đơn hàng và xe'}
                                                     </span>
                                                 </label>
                                             </div>
@@ -488,188 +676,16 @@ function ModernDashboard() {
                                                 ))}
                                             </div>
                                         </div>
-                                    )}
                                 </div>
                             )}
-                            
-                            <MapContainer 
-                                center={HANOI_CENTER} 
-                                zoom={12} 
-                                className="map-container"
-                            >
-                                <TileLayer
-                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                />
-                                
-                                {/* Render vehicles */}
-                                {vehicles.map((vehicle, index) => {
-                                    // Get position from vehicle.location or vehicle.position
-                                    const position = vehicle.location || vehicle.position || HANOI_CENTER;
-                                    
-                                    // Validate position is array with 2 numbers
-                                    if (!Array.isArray(position) || position.length !== 2 || 
-                                        typeof position[0] !== 'number' || typeof position[1] !== 'number') {
-                                        console.warn(`Invalid position for vehicle ${vehicle.id}:`, position);
-                                        return null;
-                                    }
-                                    
-                                    return (
-                                    <Marker 
-                                        key={`vehicle-${vehicle.id || index}`}
-                                        position={position}
-                                        icon={vehicleIcon}
-                                    >
-                                        <Popup>
-                                            <div>
-                                                <h4>Xe {vehicle.id}</h4>
-                                                <p>Loại: {vehicle.type}</p>
-                                                <p>Tải trọng: {vehicle.capacity}kg</p>
-                                                <p>Trạng thái: {vehicle.status}</p>
-                                            </div>
-                                        </Popup>
-                                    </Marker>
-                                    );
-                                })}
-                                
-                                {/* Render orders - only if showAllOrders is true */}
-                                {showAllOrders && orders.map((order, index) => (
-                                    <React.Fragment key={`order-${index}`}>
-                                        <Marker position={order.pickup} icon={pickupIcon}>
-                                            <Popup>Điểm lấy hàng - Đơn {order.id}</Popup>
-                                        </Marker>
-                                        <Marker position={order.delivery} icon={deliveryIcon}>
-                                            <Popup>Điểm giao hàng - Đơn {order.id}</Popup>
-                                        </Marker>
-                                    </React.Fragment>
-                                ))}
-                                
-                                {/* Render optimized routes */}
-                                {visibleRoutesData.map((route, index) => {
-                                    // Validate path before rendering
-                                    if (!route.path || !Array.isArray(route.path) || route.path.length < 2) {
-                                        console.error(`❌ Invalid path for route ${route.vehicleId}:`, route.path);
-                                        return null;
-                                    }
-                                    
-                                    return (
-                                    <React.Fragment key={`route-${route.vehicleId}`}>
-                                        {/* Route line */}
-                                        <Polyline
-                                            positions={route.path}
-                                            color={ROUTE_COLORS[route.colorIndex % ROUTE_COLORS.length]}
-                                            weight={4}
-                                            opacity={0.7}
-                                        >
-                                                <Popup>
-                                                    <div>
-                                                        <h4>Route - Xe {route.vehicleId}</h4>
-                                                        <p>Khoảng cách: {(route.distance || 0).toFixed(2)} km</p>
-                                                        <p>Thời gian: {Math.round(route.duration || 0)} phút</p>
-                                                        <p>Số điểm dừng: {route.stops?.length || 0}</p>
-                                                        <p>Số đơn hàng: {route.assignedOrders?.length || 0}</p>
-                                                        <p>Tải trọng: {route.totalWeight || 0} kg</p>
-                                                    </div>
-                                                </Popup>
-                                            </Polyline>
-                                        
-                                            {/* Route stops markers */}
-                                            {route.stops && route.stops.map((stop, stopIndex) => {
-                                                if (stop.type === 'depot') return null; // Skip depot
-                                                
-                                                // Tìm order tương ứng để lấy thông tin đầy đủ
-                                                const relatedOrder = orders.find(o => o.id === stop.orderId);
-                                                
-                                                // Lấy địa chỉ từ stop hoặc từ order (nếu đã có), nếu không có thì fallback sang AddressDisplay
-                                                const currentAddress = stop.type === 'pickup' 
-                                                    ? (stop.pickupAddress || relatedOrder?.pickupAddress)
-                                                    : (stop.deliveryAddress || relatedOrder?.deliveryAddress);
-                                                
-                                                const otherAddress = stop.type === 'pickup'
-                                                    ? (stop.deliveryAddress || relatedOrder?.deliveryAddress)
-                                                    : (stop.pickupAddress || relatedOrder?.pickupAddress);
-                                                
-                                                return (
-                                                    <Marker
-                                                        key={`stop-${index}-${stopIndex}`}
-                                                        position={stop.point}
-                                                        icon={stop.type === 'pickup' ? pickupIcon : deliveryIcon}
-                                                    >
-                                                        <Popup maxWidth={300}>
-                                                            <div style={{ minWidth: '250px' }}>
-                                                                <h3 style={{ margin: '0 0 10px 0', fontSize: '16px', borderBottom: '2px solid var(--color-primary)', paddingBottom: '5px', color: 'var(--color-text-primary)' }}>
-                                                                    {stop.type === 'pickup' ? '📦 Điểm lấy hàng' : '🎯 Điểm giao hàng'}
-                                                                </h3>
-                                                                
-                                                                <p style={{ margin: '5px 0', fontSize: '14px' }}>
-                                                                    <strong>Đơn hàng:</strong> #{stop.orderId}
-                                                                </p>
-                                                                
-                                                                <p style={{ margin: '5px 0', fontSize: '14px' }}>
-                                                                    <strong>Xe:</strong> #{route.vehicleId}
-                                                                </p>
-                                                                
-                                                                {stop.weight && (
-                                                                    <p style={{ margin: '5px 0', fontSize: '14px' }}>
-                                                                        <strong>Khối lượng:</strong> {stop.weight}kg
-                                                                    </p>
-                                                                )}
-                                                                
-                                                                <p style={{ margin: '5px 0', fontSize: '14px' }}>
-                                                                    <strong>Điểm dừng:</strong> {stopIndex}/{route.stops.length - 1}
-                                                                </p>
-                                                                
-                                                                <div style={{ marginTop: '10px', padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
-                                                                    <p style={{ margin: '3px 0', fontSize: '13px' }}>
-                                                                        <strong>📍 Địa chỉ {stop.type === 'pickup' ? 'lấy hàng' : 'giao hàng'}:</strong>
-                                                                    </p>
-                                                                    <div style={{ marginTop: '5px', fontSize: '12px', color: '#555' }}>
-                                                                        {currentAddress ? (
-                                                                            <span>{currentAddress}</span>
-                                                                        ) : (
-                                                                            <AddressDisplay 
-                                                                                coordinates={stop.point} 
-                                                                                short={false}
-                                                                            />
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                                
-                                                                {(otherAddress || relatedOrder) && (
-                                                                    <div style={{ marginTop: '10px', padding: '8px', backgroundColor: '#e8f4f8', borderRadius: '4px' }}>
-                                                                        <p style={{ margin: '3px 0', fontSize: '13px' }}>
-                                                                            <strong>
-                                                                                {stop.type === 'pickup' ? '🏁 Gửi đến:' : '📮 Gửi từ:'}
-                                                                            </strong>
-                                                                        </p>
-                                                                        <div style={{ marginTop: '5px', fontSize: '12px', color: '#555' }}>
-                                                                            {otherAddress ? (
-                                                                                <span>{otherAddress}</span>
-                                                                            ) : relatedOrder ? (
-                                                                                <AddressDisplay 
-                                                                                    coordinates={stop.type === 'pickup' ? relatedOrder.delivery : relatedOrder.pickup} 
-                                                                                    short={true}
-                                                                                />
-                                                                            ) : null}
-                                                                        </div>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </Popup>
-                                                    </Marker>
-                                                );
-                                            })}
-                                    </React.Fragment>
-                                    );
-                                })}
-                            </MapContainer>
                         </div>
 
-                        {/* Stats Section */}
-                        <div className="stats-section">
+                        {/* Stats Section - Below Map */}
+                        <div className="stats-section" style={{ background: 'white', borderRadius: '16px', padding: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
                             {optimizationStats ? (
                                 // Show optimization stats if available
                                 <>
+                                <div className="stats-grid">
                                     <div className="stat-card optimization-card">
                                         <div className="stat-header">
                                             <span className="stat-label">🎯 Optimization Results</span>
@@ -695,8 +711,8 @@ function ModernDashboard() {
                                             <span className="stat-label">Vehicles Used</span>
                                             <span className="stat-icon">🚛</span>
                                         </div>
-                                        <div className="stat-value">{optimizationStats.vehiclesWithRoutes}/{optimizationStats.totalVehicles}</div>
-                                        <div className="stat-detail">{((optimizationStats.vehiclesWithRoutes / optimizationStats.totalVehicles) * 100).toFixed(0)}% sử dụng</div>
+                                        <div className="stat-value">{optimizationStats.vehiclesWithRoutes}/{vehicles.length}</div>
+                                        <div className="stat-detail">{vehicles.length > 0 ? ((optimizationStats.vehiclesWithRoutes / vehicles.length) * 100).toFixed(0) : 0}% sử dụng</div>
                                     </div>
 
                                     <div className="stat-card">
@@ -737,6 +753,49 @@ function ModernDashboard() {
                                         </div>
                                         <div className="stat-detail">Tổng quãng đường</div>
                                     </div>
+                                </div>
+                                
+                                {/* Driver Statistics - Inline */}
+                                <div className="optimization-stats-header" style={{marginTop: '20px'}}>
+                                    <h3>Thống kê Tài xế ({driverStats.total})</h3>
+                                </div>
+                                <div className="stats-grid" style={{marginTop: '12px'}}>
+                                    <div className="stat-card">
+                                        <div className="stat-header">
+                                            <span className="stat-label">Đang hoạt động</span>
+                                            <span className="stat-icon" style={{color: '#28a745'}}>🚗</span>
+                                        </div>
+                                        <div className="stat-value">{driverStats.active}</div>
+                                        <div className="stat-detail">Active</div>
+                                    </div>
+                                    
+                                    <div className="stat-card">
+                                        <div className="stat-header">
+                                            <span className="stat-label">Sẵn sàng</span>
+                                            <span className="stat-icon" style={{color: '#17a2b8'}}>✓</span>
+                                        </div>
+                                        <div className="stat-value">{driverStats.available}</div>
+                                        <div className="stat-detail">Available</div>
+                                    </div>
+                                    
+                                    <div className="stat-card">
+                                        <div className="stat-header">
+                                            <span className="stat-label">Bận</span>
+                                            <span className="stat-icon" style={{color: '#ffc107'}}>⏳</span>
+                                        </div>
+                                        <div className="stat-value">{driverStats.busy}</div>
+                                        <div className="stat-detail">Busy</div>
+                                    </div>
+                                    
+                                    <div className="stat-card">
+                                        <div className="stat-header">
+                                            <span className="stat-label">Offline</span>
+                                            <span className="stat-icon" style={{color: '#6c757d'}}>⭕</span>
+                                        </div>
+                                        <div className="stat-value">{driverStats.offline}</div>
+                                        <div className="stat-detail">Ngoại tuyến</div>
+                                    </div>
+                                </div>
                                 </>
                             ) : (
                                 // Show default stats
@@ -770,47 +829,6 @@ function ModernDashboard() {
                                     </div>
                                 </>
                             )}
-                        </div>
-                    </div>
-
-                    {/* Bottom Section */}
-                    <div className="bottom-section">
-                        {/* Drivers Statistics */}
-                        <div className="drivers-status">
-                            <h3>Thống kê Tài xế ({driverStats.total})</h3>
-                            <div className="drivers-stats-grid">
-                                <div className="driver-stat-item">
-                                    <div className="stat-icon active">🚗</div>
-                                    <div className="stat-info">
-                                        <div className="stat-number">{driverStats.active}</div>
-                                        <div className="stat-label">Đang hoạt động</div>
-                                    </div>
-                                </div>
-                                
-                                <div className="driver-stat-item">
-                                    <div className="stat-icon available">✓</div>
-                                    <div className="stat-info">
-                                        <div className="stat-number">{driverStats.available}</div>
-                                        <div className="stat-label">Sẵn sàng</div>
-                                    </div>
-                                </div>
-                                
-                                <div className="driver-stat-item">
-                                    <div className="stat-icon busy">⏳</div>
-                                    <div className="stat-info">
-                                        <div className="stat-number">{driverStats.busy}</div>
-                                        <div className="stat-label">Bận</div>
-                                    </div>
-                                </div>
-                                
-                                <div className="driver-stat-item">
-                                    <div className="stat-icon offline">⭕</div>
-                                    <div className="stat-info">
-                                        <div className="stat-number">{driverStats.offline}</div>
-                                        <div className="stat-label">Offline</div>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     </div>
                 </>

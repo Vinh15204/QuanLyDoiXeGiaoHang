@@ -23,7 +23,10 @@ function UserDashboardLayout() {
             {/* Sidebar */}
             <div className="sidebar">
                 <div className="sidebar-header">
-                    <h2>🚚 QLDXGH</h2>
+                    <div className="logo">
+                        <span className="logo-icon">🚚</span>
+                        <span className="logo-text">PD-Fleet</span>
+                    </div>
                 </div>
 
                 <nav className="sidebar-nav">

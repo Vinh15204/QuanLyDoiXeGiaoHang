@@ -140,6 +140,19 @@ class DeliveryHub {
             console.error('Error broadcasting route update to users:', err);
         }
     }
+
+    // Notify all connected clients that orders have been updated
+    notifyOrdersUpdated() {
+        try {
+            console.log('Broadcasting orders update to all clients');
+            this.io.emit('ordersUpdated', {
+                timestamp: new Date().toISOString(),
+                message: 'Orders have been updated'
+            });
+        } catch (err) {
+            console.error('Error notifying orders update:', err);
+        }
+    }
 }
 
 module.exports = DeliveryHub;

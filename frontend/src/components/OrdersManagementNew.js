@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/ModernDashboard.css';
 import AddressDisplay from './AddressDisplay';
+import BulkActionToolbar from './BulkActionToolbar';
+import BulkAssignDriverModal from './BulkAssignDriverModal';
+import BulkStatusChangeModal from './BulkStatusChangeModal';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
@@ -20,13 +23,22 @@ const normalizeCoords = (coords) => {
 function OrdersManagement() {
     const navigate = useNavigate();
     const [orders, setOrders] = useState([]);
+    const [allOrders, setAllOrders] = useState([]); // Store all orders for filtering
     const [drivers, setDrivers] = useState([]);
+    const [vehicles, setVehicles] = useState([]);
+    const [users, setUsers] = useState([]); // Store all users for display names
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [showModal, setShowModal] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
     const [driverStats, setDriverStats] = useState({});
+    
+    // Filter states
+    const [filterWeight, setFilterWeight] = useState('');
+    const [filterStatus, setFilterStatus] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
+    
     const [formData, setFormData] = useState({
         id: '',
         senderId: '',
@@ -40,6 +52,48 @@ function OrdersManagement() {
         const user = localStorage.getItem('currentUser');
         return user ? JSON.parse(user) : null;
     });
+
+    // Bulk selection states
+    const [selectedOrders, setSelectedOrders] = useState([]);
+    const [selectAll, setSelectAll] = useState(false);
+    const [bulkActionLoading, setBulkActionLoading] = useState(false);
+    const [showBulkAssignModal, setShowBulkAssignModal] = useState(false);
+
+    // Sorting states
+    const [sortBy, setSortBy] = useState(null);
+    const [sortOrder, setSortOrder] = useState('asc');
+    const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
+
+    const handleSort = (field) => {
+        if (sortBy === field) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(field);
+            setSortOrder('asc');
+        }
+    };
+
+    const getSortedOrders = () => {
+        if (!sortBy) return orders;
+        
+        return [...orders].sort((a, b) => {
+            let aVal = a[sortBy];
+            let bVal = b[sortBy];
+            
+            // Handle null/undefined values
+            if (aVal == null) return 1;
+            if (bVal == null) return -1;
+            
+            // Numeric comparison
+            if (typeof aVal === 'number' && typeof bVal === 'number') {
+                return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
+            }
+            
+            // String comparison
+            const comparison = String(aVal).localeCompare(String(bVal));
+            return sortOrder === 'asc' ? comparison : -comparison;
+        });
+    };
 
     // Track if component is mounted to prevent setState on unmounted component
     const [isMounted, setIsMounted] = useState(true);
@@ -285,10 +339,32 @@ function OrdersManagement() {
                 return;
             }
 
+            // Check if status changed to pending/approved and order has driver assigned
+            const oldStatus = selectedOrder?.status;
+            const newStatus = formData.status;
+            const statusChangedToPendingOrApproved = selectedOrder && 
+                selectedOrder.driverId && 
+                (newStatus === 'pending' || newStatus === 'approved') &&
+                oldStatus !== newStatus;
+
+            if (statusChangedToPendingOrApproved) {
+                const shouldUnassign = window.confirm(
+                    `⚠️ Đổi trạng thái về "${newStatus === 'pending' ? 'Chờ xử lý' : 'Đã duyệt'}" sẽ HỦY PHÂN CÔNG tài xế #${selectedOrder.driverId}.\n\n` +
+                    `Bạn có muốn tiếp tục?\n\n` +
+                    `- Có: Hủy phân công và tính lại quãng đường\n` +
+                    `- Hủy: Không lưu thay đổi`
+                );
+
+                if (!shouldUnassign) {
+                    return; // Cancel the change
+                }
+            }
+
             // Check if driver changed and both old & new drivers exist
             const oldDriverId = selectedOrder?.driverId;
             const newDriverId = formData.driverId ? parseInt(formData.driverId) : null;
             const driverChanged = selectedOrder && oldDriverId && newDriverId && oldDriverId !== newDriverId;
+            const driverAssignedNew = selectedOrder && !oldDriverId && newDriverId; // New: assigned driver to previously unassigned order
 
             if (driverChanged) {
                 const shouldRecalculate = window.confirm(
@@ -303,13 +379,32 @@ function OrdersManagement() {
                 }
 
                 // Will recalculate routes after saving
+            } else if (driverAssignedNew) {
+                const shouldRecalculate = window.confirm(
+                    `Bạn đang phân công đơn hàng cho Driver #${newDriverId}.\n\n` +
+                    `Bạn có muốn tính lại quãng đường tối ưu cho tài xế không?\n\n` +
+                    `- Có: Tính lại route tối ưu\n` +
+                    `- Hủy: Không lưu thay đổi`
+                );
+
+                if (!shouldRecalculate) {
+                    return; // Cancel the change
+                }
+
+                // Will recalculate route after saving
             }
 
-            // Determine assignment type based on driverId
+            // Determine assignment type and final status based on driverId
             let assignmentType = null;
             let orderStatus = formData.status;
+            let finalDriverId = formData.driverId ? parseInt(formData.driverId) : null;
             
-            if (formData.driverId) {
+            // If status changed to pending/approved, unassign driver
+            if (statusChangedToPendingOrApproved) {
+                finalDriverId = null;
+                assignmentType = null;
+                console.log(`⚠️ Status changed to "${newStatus}" - unassigning driver ${oldDriverId}`);
+            } else if (formData.driverId) {
                 if (selectedOrder) {
                     // Editing existing order
                     const wasAutoAssigned = selectedOrder.assignmentType === 'auto';
@@ -334,7 +429,7 @@ function OrdersManagement() {
                 receiverId: parseInt(formData.receiverId),
                 weight: parseFloat(formData.weight),
                 status: orderStatus,
-                driverId: formData.driverId ? parseInt(formData.driverId) : null,
+                driverId: finalDriverId,
                 assignmentType: assignmentType,
                 notes: formData.notes
             };
@@ -360,16 +455,30 @@ function OrdersManagement() {
                 const result = await response.json();
                 console.log('Success:', result);
                 
-                // If driver changed, recalculate routes for both drivers
-                if (driverChanged) {
-                    console.log('🔄 Recalculating routes for drivers:', oldDriverId, newDriverId);
-                    
+                // Determine which drivers need route recalculation
+                let driversToRecalculate = [];
+                
+                if (statusChangedToPendingOrApproved) {
+                    // Only old driver needs recalculation (order was unassigned)
+                    driversToRecalculate = [oldDriverId];
+                    console.log('🔄 Status changed - will recalculate for unassigned driver:', oldDriverId);
+                } else if (driverChanged) {
+                    // Both old and new drivers need recalculation
+                    driversToRecalculate = [oldDriverId, newDriverId];
+                    console.log('🔄 Driver changed - will recalculate for both drivers:', oldDriverId, newDriverId);
+                } else if (driverAssignedNew) {
+                    // Only new driver needs recalculation (first time assignment)
+                    driversToRecalculate = [newDriverId];
+                    console.log('🔄 Driver assigned (new) - will recalculate for driver:', newDriverId);
+                }
+                
+                if (driversToRecalculate.length > 0) {
                     try {
                         const recalcResponse = await fetch(`${API_BASE_URL}/api/optimize/recalculate-drivers`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ 
-                                driverIds: [oldDriverId, newDriverId] 
+                                driverIds: driversToRecalculate 
                             })
                         });
 
@@ -382,12 +491,16 @@ function OrdersManagement() {
                             sessionStorage.removeItem('cacheTime');
                             sessionStorage.setItem('forceRefreshRoutes', 'true');
                             
-                            // Clear localStorage route cache for both drivers
-                            localStorage.removeItem(`driverRoute_${oldDriverId}`);
-                            localStorage.removeItem(`driverRoute_${newDriverId}`);
-                            console.log(`🗑️ Cleared route cache for drivers ${oldDriverId} and ${newDriverId}`);
+                            // Clear localStorage route cache for affected drivers
+                            driversToRecalculate.forEach(dId => {
+                                localStorage.removeItem(`driverRoute_${dId}`);
+                            });
+                            console.log(`🗑️ Cleared route cache for drivers ${driversToRecalculate.join(', ')}`);
                             
-                            alert('Cập nhật đơn hàng và tính lại quãng đường thành công!\nTài xế reload trang để thấy tuyến đường mới.');
+                            const message = statusChangedToPendingOrApproved
+                                ? 'Cập nhật đơn hàng, hủy phân công tài xế và tính lại quãng đường thành công!'
+                                : 'Cập nhật đơn hàng và tính lại quãng đường thành công!';
+                            alert(message + '\nTài xế reload trang để thấy tuyến đường mới.');
                         } else {
                             console.error('Failed to recalculate routes');
                             alert('Cập nhật đơn hàng thành công, nhưng không thể tính lại quãng đường.');
@@ -402,6 +515,7 @@ function OrdersManagement() {
                 
                 handleCloseModal();
                 fetchOrders();
+                fetchDrivers(); // Refresh driver stats
             } else {
                 const errorData = await response.text();
                 console.error('Error response:', errorData);
@@ -420,6 +534,8 @@ function OrdersManagement() {
         }
         fetchOrders();
         fetchDrivers();
+        fetchVehicles();
+        fetchUsers();
     }, [currentUser, navigate]);
 
     // Auto-refresh when returning to this page
@@ -439,18 +555,79 @@ function OrdersManagement() {
         };
     }, []);
 
+    // Filter orders when filter criteria change
+    useEffect(() => {
+        let filtered = [...allOrders];
+        
+        // Filter by weight
+        if (filterWeight) {
+            if (filterWeight === '0-10') {
+                filtered = filtered.filter(o => o.weight >= 0 && o.weight <= 10);
+            } else if (filterWeight === '10-20') {
+                filtered = filtered.filter(o => o.weight > 10 && o.weight <= 20);
+            } else if (filterWeight === '20-50') {
+                filtered = filtered.filter(o => o.weight > 20 && o.weight <= 50);
+            } else if (filterWeight === '50+') {
+                filtered = filtered.filter(o => o.weight > 50);
+            }
+        }
+        
+        // Filter by status
+        if (filterStatus) {
+            filtered = filtered.filter(o => o.status === filterStatus);
+        }
+        
+        // Filter by search term (phone number)
+        if (searchTerm) {
+            filtered = filtered.filter(o => {
+                const search = searchTerm.toLowerCase();
+                const sender = users.find(u => u.id === o.senderId);
+                const receiver = users.find(u => u.id === o.receiverId);
+                return sender?.phone?.toLowerCase().includes(search) ||
+                       receiver?.phone?.toLowerCase().includes(search);
+            });
+        }
+        
+        setOrders(filtered);
+    }, [filterWeight, filterStatus, searchTerm, allOrders, users]);
+
     const fetchOrders = async () => {
         try {
             setLoading(true);
             const response = await fetch(`${API_BASE_URL}/api/orders`);
             if (response.ok) {
                 const data = await response.json();
+                setAllOrders(data);
                 setOrders(data);
             }
         } catch (err) {
             setError('Lỗi khi tải dữ liệu đơn hàng: ' + err.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchUsers = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/users`);
+            if (response.ok) {
+                const data = await response.json();
+                setUsers(data);
+            }
+        } catch (err) {
+            console.error('Error fetching users:', err);
+        }
+    };
+
+    const fetchVehicles = async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/vehicles`);
+            if (response.ok) {
+                const data = await response.json();
+                setVehicles(data);
+            }
+        } catch (err) {
+            console.error('Error fetching vehicles:', err);
         }
     };
 
@@ -544,45 +721,338 @@ function OrdersManagement() {
         }
     };
 
+    // ==================== BULK ACTIONS ====================
+    
+    const handleSelectAll = () => {
+        if (selectAll) {
+            setSelectedOrders([]);
+            setSelectAll(false);
+        } else {
+            setSelectedOrders(orders.map(o => o.id));
+            setSelectAll(true);
+        }
+    };
+
+    const handleSelectOrder = (orderId) => {
+        setSelectedOrders(prev => {
+            if (prev.includes(orderId)) {
+                const newSelection = prev.filter(id => id !== orderId);
+                setSelectAll(false);
+                return newSelection;
+            } else {
+                const newSelection = [...prev, orderId];
+                setSelectAll(newSelection.length === orders.length);
+                return newSelection;
+            }
+        });
+    };
+
+    const handleClearSelection = () => {
+        setSelectedOrders([]);
+        setSelectAll(false);
+    };
+
+    const handleBulkAssignDriver = async (driverId) => {
+        try {
+            setBulkActionLoading(true);
+            
+            // Collect old driver IDs from selected orders
+            const affectedOrders = orders.filter(o => selectedOrders.includes(o.id));
+            const oldDriverIds = [...new Set(
+                affectedOrders
+                    .map(o => o.driverId)
+                    .filter(id => id && id !== driverId) // Exclude null and new driver
+            )];
+            
+            console.log('🔄 Bulk assign - Old drivers:', oldDriverIds, 'New driver:', driverId);
+            
+            const response = await fetch(`${API_BASE_URL}/api/orders/bulk-assign`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    orderIds: selectedOrders,
+                    driverId: parseInt(driverId)
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                // Recalculate routes for all affected drivers (old + new)
+                const affectedDriverIds = [...oldDriverIds, driverId];
+                
+                if (affectedDriverIds.length > 0) {
+                    console.log('🔄 Recalculating routes for drivers:', affectedDriverIds);
+                    
+                    try {
+                        const recalcResponse = await fetch(`${API_BASE_URL}/api/optimize/recalculate-drivers`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                driverIds: affectedDriverIds 
+                            })
+                        });
+
+                        if (recalcResponse.ok) {
+                            const recalcResult = await recalcResponse.json();
+                            console.log('✅ Routes recalculated:', recalcResult);
+                            
+                            // Clear route cache and force Dashboard refresh
+                            sessionStorage.removeItem('cachedRoutes');
+                            sessionStorage.removeItem('cacheTime');
+                            sessionStorage.setItem('forceRefreshRoutes', 'true');
+                            
+                            // Clear localStorage route cache for all affected drivers
+                            affectedDriverIds.forEach(dId => {
+                                localStorage.removeItem(`driverRoute_${dId}`);
+                            });
+                            console.log(`🗑️ Cleared route cache for drivers ${affectedDriverIds.join(', ')}`);
+                        }
+                    } catch (recalcError) {
+                        console.error('Error recalculating routes:', recalcError);
+                    }
+                }
+                
+                alert(`✅ Đã gán ${result.modifiedCount || result.updatedCount} đơn hàng và tính lại quãng đường!`);
+                await fetchOrders();
+                await fetchDrivers(); // Refresh driver stats
+                handleClearSelection();
+                setShowBulkAssignModal(false);
+            } else {
+                alert(`❌ Lỗi: ${result.message || 'Không thể gán đơn hàng'}`);
+            }
+        } catch (error) {
+            console.error('Error bulk assigning:', error);
+            alert('Có lỗi xảy ra: ' + error.message);
+        } finally {
+            setBulkActionLoading(false);
+        }
+    };
+
+    const handleBulkStatusChange = async (newStatus) => {
+        try {
+            setBulkActionLoading(true);
+            
+            // Check if changing to pending/approved and some orders have drivers
+            const affectedOrders = orders.filter(o => selectedOrders.includes(o.id));
+            const shouldUnassignDriver = (newStatus === 'pending' || newStatus === 'approved');
+            const affectedDriverIds = shouldUnassignDriver 
+                ? [...new Set(affectedOrders.map(o => o.driverId).filter(id => id))]
+                : [];
+            
+            if (affectedDriverIds.length > 0) {
+                console.log(`⚠️ Status change to "${newStatus}" will unassign drivers:`, affectedDriverIds);
+            }
+            
+            const response = await fetch(`${API_BASE_URL}/api/orders/bulk-status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    orderIds: selectedOrders,
+                    newStatus: newStatus,
+                    unassignDriver: shouldUnassignDriver
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                // If drivers were unassigned, recalculate their routes
+                if (affectedDriverIds.length > 0) {
+                    console.log('🔄 Recalculating routes for unassigned drivers:', affectedDriverIds);
+                    
+                    try {
+                        const recalcResponse = await fetch(`${API_BASE_URL}/api/optimize/recalculate-drivers`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                driverIds: affectedDriverIds 
+                            })
+                        });
+
+                        if (recalcResponse.ok) {
+                            const recalcResult = await recalcResponse.json();
+                            console.log('✅ Routes recalculated:', recalcResult);
+                            
+                            // Clear route cache
+                            sessionStorage.removeItem('cachedRoutes');
+                            sessionStorage.removeItem('cacheTime');
+                            sessionStorage.setItem('forceRefreshRoutes', 'true');
+                            
+                            affectedDriverIds.forEach(dId => {
+                                localStorage.removeItem(`driverRoute_${dId}`);
+                            });
+                            console.log(`🗑️ Cleared route cache for drivers ${affectedDriverIds.join(', ')}`);
+                        }
+                    } catch (recalcError) {
+                        console.error('Error recalculating routes:', recalcError);
+                    }
+                }
+                
+                const message = affectedDriverIds.length > 0
+                    ? `✅ Đã cập nhật ${result.modifiedCount || result.updatedCount} đơn hàng, hủy phân công tài xế và tính lại quãng đường!`
+                    : `✅ Đã cập nhật trạng thái ${result.modifiedCount || result.updatedCount} đơn hàng!`;
+                
+                alert(message);
+                await fetchOrders();
+                await fetchDrivers(); // Refresh driver stats
+                handleClearSelection();
+                setShowBulkStatusModal(false);
+            } else {
+                alert(`❌ Lỗi: ${result.message || 'Không thể cập nhật trạng thái'}`);
+            }
+        } catch (error) {
+            console.error('Error bulk status change:', error);
+            alert('Có lỗi xảy ra: ' + error.message);
+        } finally {
+            setBulkActionLoading(false);
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (!window.confirm(`Bạn có chắc muốn xóa ${selectedOrders.length} đơn hàng?\n\nThao tác này không thể hoàn tác!`)) {
+            return;
+        }
+
+        try {
+            setBulkActionLoading(true);
+            
+            const response = await fetch(`${API_BASE_URL}/api/orders/bulk-delete`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    orderIds: selectedOrders
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                alert(`✅ Đã xóa ${result.deletedCount} đơn hàng!`);
+                await fetchOrders();
+                handleClearSelection();
+            } else {
+                alert(`❌ Lỗi: ${result.message || 'Không thể xóa đơn hàng'}`);
+            }
+        } catch (error) {
+            console.error('Error bulk delete:', error);
+            alert('Có lỗi xảy ra: ' + error.message);
+        } finally {
+            setBulkActionLoading(false);
+        }
+    };
+
+    // ==================== END BULK ACTIONS ====================
+
     return (
         <div className="orders-content">
                     <div className="page-header">
                         <h1>Orders Management</h1>
                         <div className="header-actions">
-                            <button className="btn-success" onClick={handleOptimizeRoutes} disabled={orders.length === 0}>
+                            <button className="btn-action" onClick={handleOptimizeRoutes} disabled={orders.length === 0}>
                                 🚚 Phân công tự động
                             </button>
-                            <button className="btn-warning" onClick={handleResetAssignments} disabled={orders.length === 0}>
+                            <button className="btn-action" onClick={handleResetAssignments} disabled={orders.length === 0}>
                                 ❌ Hủy phân công
                             </button>
-                            <button className="btn-primary" onClick={handleCreateOrder}>+ Create New Order</button>
+                            <button className="btn-action btn-primary" onClick={handleCreateOrder}>➕ Tạo đơn hàng mới</button>
                         </div>
                     </div>
 
                     {loading && <div className="loading">Loading orders...</div>}
                     {error && <div className="error-message">{error}</div>}
 
+                    {/* Filter Controls */}
+                    <div className="filter-controls">
+                        <div className="filter-group">
+                            <label>🔍 Tìm kiếm SĐT:</label>
+                            <input
+                                type="text"
+                                className="search-input"
+                                placeholder="Nhập số điện thoại..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                style={{padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', width: '200px'}}
+                            />
+                        </div>
+                        <div className="filter-group">
+                            <label>🎯 Lọc theo cân nặng:</label>
+                            <select value={filterWeight} onChange={(e) => setFilterWeight(e.target.value)}>
+                                <option value="">Tất cả</option>
+                                <option value="0-10">0-10kg</option>
+                                <option value="10-20">10-20kg</option>
+                                <option value="20-50">20-50kg</option>
+                                <option value="50+">Trên 50kg</option>
+                            </select>
+                        </div>
+                        <div className="filter-group">
+                            <label>📦 Lọc theo trạng thái:</label>
+                            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                                <option value="">Tất cả</option>
+                                <option value="pending">Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="assigned">Assigned</option>
+                                <option value="in_transit">In Transit</option>
+                                <option value="delivered">Delivered</option>
+                                <option value="cancelled">Cancelled</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Bulk Action Toolbar */}
+                    <BulkActionToolbar 
+                        selectedCount={selectedOrders.length}
+                        onClear={handleClearSelection}
+                        onAssignDriver={() => setShowBulkAssignModal(true)}
+                        onChangeStatus={() => setShowBulkStatusModal(true)}
+                        onDelete={handleBulkDelete}
+                        loading={bulkActionLoading}
+                        hideDelete={true}
+                    />
+
                     <div className="orders-table-container">
                         <table className="orders-table">
                             <thead>
                                 <tr>
-                                    <th>Order ID</th>
-                                    <th>Sender</th>
-                                    <th>Receiver</th>
+                                    <th className="checkbox-column">
+                                        <input 
+                                            type="checkbox"
+                                            checked={selectAll}
+                                            onChange={handleSelectAll}
+                                            title="Select all orders"
+                                        />
+                                    </th>
+                                    <th onClick={() => handleSort('id')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Order ID {sortBy === 'id' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                    </th>
                                     <th>Pickup Address</th>
                                     <th>Delivery Address</th>
-                                    <th>Weight</th>
-                                    <th>Status</th>
-                                    <th>Driver</th>
+                                    <th onClick={() => handleSort('weight')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Weight {sortBy === 'weight' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                    </th>
+                                    <th onClick={() => handleSort('status')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        Status {sortBy === 'status' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                    </th>
+                                    <th onClick={() => handleSort('driverId')} style={{ cursor: 'pointer', userSelect: 'none' }}>
+                                        VEHICLE ID {sortBy === 'driverId' && (sortOrder === 'asc' ? '↑' : '↓')}
+                                    </th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {orders.map((order, index) => (
-                                    <tr key={index}>
+                                {getSortedOrders().map((order, index) => (
+                                    <tr 
+                                        key={index}
+                                        className={selectedOrders.includes(order.id) ? 'table-row-selected' : ''}
+                                    >
+                                        <td className="checkbox-column">
+                                            <input 
+                                                type="checkbox"
+                                                checked={selectedOrders.includes(order.id)}
+                                                onChange={() => handleSelectOrder(order.id)}
+                                            />
+                                        </td>
                                         <td>#{order.id}</td>
-                                        <td>User #{order.senderId}</td>
-                                        <td>User #{order.receiverId}</td>
                                         <td>
                                             {order.pickupAddress ? (
                                                 <span title={order.pickupAddress}>{order.pickupAddress.length > 40 ? order.pickupAddress.substring(0, 40) + '...' : order.pickupAddress}</span>
@@ -610,7 +1080,10 @@ function OrdersManagement() {
                                         <td>
                                             {order.driverId ? (
                                                 <span>
-                                                    Driver #{order.driverId}
+                                                    {(() => {
+                                                        const vehicle = vehicles.find(v => v.id === order.driverId);
+                                                        return vehicle ? `Xe #${vehicle.id}` : `Xe #${order.driverId}`;
+                                                    })()}
                                                     {order.assignmentType === 'manual' && <span style={{fontSize: '11px', color: '#666'}}> (Thủ công)</span>}
                                                 </span>
                                             ) : 'Unassigned'}
@@ -655,14 +1128,61 @@ function OrdersManagement() {
                                     <button className="close-btn" onClick={handleCloseModal}>❌</button>
                                 </div>
                                 <div className="modal-body">
+                                    <h4 style={{marginTop: 0, marginBottom: '15px', color: '#4a5568', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px'}}>📦 Thông tin đơn hàng</h4>
                                     <div className="detail-row">
-                                        <strong>Sender:</strong> User #{selectedOrder.senderId}
+                                        <strong>Người gửi:</strong> {(() => {
+                                            const sender = users.find(u => u.id === selectedOrder.senderId);
+                                            if (sender) {
+                                                return (
+                                                    <div>
+                                                        <div>{sender.name} (#{sender.id})</div>
+                                                        {sender.phone && <small style={{color: '#888'}}>📞 {sender.phone}</small>}
+                                                    </div>
+                                                );
+                                            }
+                                            return `User #${selectedOrder.senderId}`;
+                                        })()}
                                     </div>
                                     <div className="detail-row">
-                                        <strong>Receiver:</strong> User #{selectedOrder.receiverId}
+                                        <strong>Người nhận:</strong> {(() => {
+                                            const receiver = users.find(u => u.id === selectedOrder.receiverId);
+                                            if (receiver) {
+                                                return (
+                                                    <div>
+                                                        <div>{receiver.name} (#{receiver.id})</div>
+                                                        {receiver.phone && <small style={{color: '#888'}}>📞 {receiver.phone}</small>}
+                                                    </div>
+                                                );
+                                            }
+                                            return `User #${selectedOrder.receiverId}`;
+                                        })()}
                                     </div>
                                     <div className="detail-row">
-                                        <strong>Pickup Location:</strong> 
+                                        <strong>Cân nặng:</strong> {selectedOrder.weight}kg
+                                    </div>
+                                    <div className="detail-row">
+                                        <strong>Trạng thái:</strong> <span className={`status-badge ${getStatusColor(selectedOrder.status)}`}>{selectedOrder.status || 'pending'}</span>
+                                    </div>
+                                    <div className="detail-row">
+                                        <strong>Tài xế:</strong> {(() => {
+                                            if (!selectedOrder.driverId) return 'Chưa gán';
+                                            const vehicle = vehicles.find(v => v.id === selectedOrder.driverId);
+                                            const driver = drivers.find(d => d.vehicleId === selectedOrder.driverId);
+                                            if (vehicle && driver) {
+                                                return (
+                                                    <div>
+                                                        <div>Xe #{vehicle.id} - {driver.name}</div>
+                                                        {driver.phone && <small style={{color: '#888'}}>📞 {driver.phone}</small>}
+                                                    </div>
+                                                );
+                                            }
+                                            return `Xe #${selectedOrder.driverId}`;
+                                        })()}
+                                    </div>
+                                    
+                                    <h4 style={{marginTop: '20px', marginBottom: '15px', color: '#4a5568', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px'}}>📍 Địa điểm</h4>
+                                    <div className="detail-row">
+                                        <strong>Điểm lấy hàng:</strong> 
                                         {selectedOrder.pickupAddress ? (
                                             <div>
                                                 <div>{selectedOrder.pickupAddress}</div>
@@ -682,7 +1202,7 @@ function OrdersManagement() {
                                         )}
                                     </div>
                                     <div className="detail-row">
-                                        <strong>Delivery Location:</strong> 
+                                        <strong>Điểm giao hàng:</strong> 
                                         {selectedOrder.deliveryAddress ? (
                                             <div>
                                                 <div>{selectedOrder.deliveryAddress}</div>
@@ -701,18 +1221,16 @@ function OrdersManagement() {
                                             'N/A'
                                         )}
                                     </div>
+                                    
+                                    <h4 style={{marginTop: '20px', marginBottom: '15px', color: '#4a5568', borderBottom: '2px solid #e2e8f0', paddingBottom: '8px'}}>📅 Thông tin khác</h4>
                                     <div className="detail-row">
-                                        <strong>Weight:</strong> {selectedOrder.weight}kg
+                                        <strong>Ngày tạo:</strong> {new Date(selectedOrder.createdAt).toLocaleString('vi-VN')}
                                     </div>
-                                    <div className="detail-row">
-                                        <strong>Status:</strong> {selectedOrder.status || 'pending'}
-                                    </div>
-                                    <div className="detail-row">
-                                        <strong>Driver:</strong> {selectedOrder.driverId ? `Driver #${selectedOrder.driverId}` : 'Unassigned'}
-                                    </div>
-                                    <div className="detail-row">
-                                        <strong>Created:</strong> {new Date(selectedOrder.createdAt).toLocaleString()}
-                                    </div>
+                                    {selectedOrder.assignmentType && (
+                                        <div className="detail-row">
+                                            <strong>Loại phân công:</strong> {selectedOrder.assignmentType === 'manual' ? 'Thủ công' : 'Tự động'}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="modal-footer">
                                     <button className="btn-outline" onClick={handleCloseModal}>Close</button>
@@ -854,6 +1372,26 @@ function OrdersManagement() {
                             </div>
                         </div>
                     )}
+
+                    {/* Bulk Assign Driver Modal */}
+                    <BulkAssignDriverModal 
+                        show={showBulkAssignModal}
+                        onClose={() => setShowBulkAssignModal(false)}
+                        onAssign={handleBulkAssignDriver}
+                        drivers={drivers}
+                        driverStats={driverStats}
+                        selectedOrders={orders.filter(o => selectedOrders.includes(o.id))}
+                        loading={bulkActionLoading}
+                    />
+
+                    {/* Bulk Status Change Modal */}
+                    <BulkStatusChangeModal 
+                        show={showBulkStatusModal}
+                        onClose={() => setShowBulkStatusModal(false)}
+                        onConfirm={handleBulkStatusChange}
+                        selectedOrders={orders.filter(o => selectedOrders.includes(o.id))}
+                        loading={bulkActionLoading}
+                    />
         </div>
     );
 }

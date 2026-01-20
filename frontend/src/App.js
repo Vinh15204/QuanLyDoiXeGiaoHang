@@ -7,11 +7,13 @@ import {
   createRoutesFromElements
 } from "react-router-dom";
 import Login from "./components/Login";
+import Register from "./components/Register";
 import UserPage from "./components/UserPage";
 import DriverPage from "./components/DriverPage";
 import DriverOrders from "./components/DriverOrders";
 import DriverDelivered from "./components/DriverDelivered";
 import DriverLayout from "./components/DriverLayout";
+import DriverSettings from "./components/DriverSettings";
 import ModernDashboardContent from "./components/ModernDashboardContent";
 import DashboardLayout from "./components/DashboardLayout";
 import VehiclesManagementNew from "./components/VehiclesManagementNew";
@@ -43,6 +45,7 @@ function App() {
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
         
         {/* Admin routes - with DashboardLayout wrapper */}
         <Route path="/admin" element={<DashboardLayout />}>
@@ -70,6 +73,7 @@ function App() {
           <Route index element={<DriverPage />} />
           <Route path="orders" element={<DriverOrders />} />
           <Route path="delivered" element={<DriverDelivered />} />
+          <Route path="settings" element={<DriverSettings />} />
         </Route>
         
         {/* Root route - redirect based on login status */}

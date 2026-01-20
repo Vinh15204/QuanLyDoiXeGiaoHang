@@ -34,34 +34,65 @@ async function optimizeWithORTools(vehicles, orders, manualConstraints = {}) {
         };
 
         console.log('   Spawning Python process...');
-        // Spawn Python process
-        const pythonProcess = spawn('python', [pythonScript]);
+        // Spawn Python process with environment variable to suppress DLL messages
+        const pythonProcess = spawn('python', [pythonScript], {
+            env: { 
+                ...process.env,
+                PYTHONUNBUFFERED: '1',  // Disable buffering
+                ORTOOLS_DOTNET_NO_NATIVE_DEPENDENCY_CHECK: '1'  // Suppress DLL messages
+            },
+            stdio: ['pipe', 'pipe', 'pipe']
+        });
         console.log('   Python process spawned, PID:', pythonProcess.pid);
         
         let outputData = '';
         let errorData = '';
+        let dataReceived = false;
 
         // Send input via stdin
-        pythonProcess.stdin.write(JSON.stringify(inputData));
-        pythonProcess.stdin.end();
+        try {
+            pythonProcess.stdin.write(JSON.stringify(inputData));
+            pythonProcess.stdin.end();
+            console.log('   ✅ Input data sent to Python');
+        } catch (error) {
+            console.error('   ❌ Failed to send data to Python:', error);
+            reject(new Error(`Failed to communicate with Python: ${error.message}`));
+            return;
+        }
 
         // Collect stdout
         pythonProcess.stdout.on('data', (data) => {
+            dataReceived = true;
             outputData += data.toString();
+            console.log('   📤 Python stdout:', data.toString().substring(0, 100) + '...');
         });
 
         // Collect stderr (for debug logs)
         pythonProcess.stderr.on('data', (data) => {
+            dataReceived = true;
             errorData += data.toString();
-            console.log('🐍 Python:', data.toString().trim());
+            console.log('   🐍 Python stderr:', data.toString().trim());
         });
+
+        // Timeout after 60 seconds
+        const timeout = setTimeout(() => {
+            if (!dataReceived) {
+                console.error('   ⏱️  Python process timeout - no data received in 60s');
+                pythonProcess.kill();
+                reject(new Error('Python process timeout - no response'));
+            }
+        }, 60000);
 
         // Handle process completion
         pythonProcess.on('close', (code) => {
+            clearTimeout(timeout);
+            console.log('   🏁 Python process closed with code:', code);
+            
             if (code !== 0) {
-                console.error('❌ Python process failed with code:', code);
-                console.error('Error output:', errorData);
-                reject(new Error(`Python optimization failed: ${errorData}`));
+                console.error('   ❌ Python process failed with code:', code);
+                console.error('   Error output:', errorData);
+                console.error('   Stdout output:', outputData.substring(0, 500));
+                reject(new Error(`Python optimization failed (code ${code}): ${errorData || 'No error message'}`));
                 return;
             }
 

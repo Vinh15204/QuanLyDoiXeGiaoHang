@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import '../styles/Login.css';
+import { useNavigate, Link } from 'react-router-dom';
+import '../styles/Auth.css';
 
 function Login() {
   console.log('🔵 Login component rendered');
@@ -97,37 +97,84 @@ function Login() {
   }, [navigate]);
 
   return (
-    <div className="login-container">
-      <div className="login-box">
-        <h2>Đăng nhập</h2>
-        {error && <div className="error-message">{error}</div>}
-        <form onSubmit={handleLogin}>
+    <div className="auth-container">
+      <div className="auth-background">
+        <div className="auth-blob blob-1"></div>
+        <div className="auth-blob blob-2"></div>
+        <div className="auth-blob blob-3"></div>
+      </div>
+      
+      <div className="auth-card">
+        <div className="auth-header">
+          <div className="auth-logo">🚚</div>
+          <h1 className="auth-title">Đăng nhập</h1>
+          <p className="auth-subtitle">Chào mừng bạn trở lại!</p>
+        </div>
+
+        <form onSubmit={handleLogin} className="auth-form">
+          {error && (
+            <div className="auth-message error">
+              <span className="message-icon">⚠️</span>
+              {error}
+            </div>
+          )}
+
           <div className="form-group">
+            <label className="form-label">
+              <span className="label-icon">👤</span>
+              Tên đăng nhập
+            </label>
             <input
-              id="username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Tên đăng nhập"
+              className="form-input"
+              placeholder="Nhập tên đăng nhập"
               disabled={loading}
               required
             />
           </div>
+
           <div className="form-group">
+            <label className="form-label">
+              <span className="label-icon">🔒</span>
+              Mật khẩu
+            </label>
             <input
-              id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Mật khẩu"
+              className="form-input"
+              placeholder="Nhập mật khẩu"
               disabled={loading}
               required
             />
           </div>
-          {error && <div className="error-message">{error}</div>}
-          <button type="submit" disabled={loading}>
-            {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
+
+          <button 
+            type="submit" 
+            className="auth-submit-btn"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <span className="spinner"></span>
+                Đang đăng nhập...
+              </>
+            ) : (
+              <>
+                <span>Đăng nhập</span>
+                <span className="btn-arrow">→</span>
+              </>
+            )}
           </button>
+
+          <div className="auth-footer">
+            <p>Chưa có tài khoản?</p>
+            <Link to="/register" className="auth-link">
+              Đăng ký ngay
+            </Link>
+          </div>
         </form>
       </div>
     </div>
